@@ -1,0 +1,26 @@
+{
+  "name": "ey-it-services-intelligence",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EY IT Services Intelligence Console. Agentic dashboard for industry calls, quarterly P&L and KPI detail metrics.",
+  "scripts": {
+    "dev": "next dev --port 4870",
+    "build": "next build",
+    "start": "next start --port 4870",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^16.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/node": "^22.15.3",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "tailwindcss": "^4.1.13",
+    "typescript": "^5.8.3"
+  }
+}

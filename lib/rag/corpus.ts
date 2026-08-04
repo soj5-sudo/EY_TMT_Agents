@@ -49,25 +49,26 @@ const PRODUCT_DOCS: RagDoc[] = [
     source: "Console documentation",
     untrusted: false,
     body:
-      "The EY IT Services Intelligence Console is an agentic dashboard covering the large IT services companies. " +
-      "It has three dashboards. Dashboard one, Industry Signal, covers key news on overall industry calls by the large IT companies, " +
-      "merger and acquisition activity, market prices and headline KPIs including revenue growth. " +
-      "Dashboard two, Quarterly P&L, is the quarterly profit and loss statement with expense analysis and cash flow. " +
-      "Dashboard three, KPI Detail, covers revenue distribution by geography and vertical, client concentration, headcount and attrition. " +
-      "A separate agents console runs due diligence agents. Every figure carries a provenance marker showing whether it is live, cached, parsed from a filing, or from the checked-in baseline.",
+      "EY TMT Intelligence is a technology, media and telecom console with a due diligence operating system. " +
+      "Dashboard one, Sector signal, covers fifty six listed names, five reference indices, theme exposure across AI compute, agentic AI and physical AI, and verified press coverage. " +
+      "Dashboard two, Quarterly P&L, rebuilds the income statement for any company in the universe from its own regulatory tagging. " +
+      "Dashboard three, KPI detail, computes quality measures and benchmarks them against the company's subsector cohort. " +
+      "Dashboard four, Company research, assembles a dossier on any company in the SEC register and accepts private documents. " +
+      "Dashboard five is the diligence operating system: forty seven agents across ten workstreams from screening to committee paper, plus portfolio monitoring. " +
+      "Every figure carries a provenance marker and nothing is estimated.",
   },
   {
     id: "product:tab1",
-    title: "Dashboard one, Industry Signal",
+    title: "Dashboard one, Sector signal",
     section: "Product",
     source: "Console documentation",
     untrusted: false,
     body:
-      "Dashboard one is Industry Signal. It shows a live news feed filtered into categories covering earnings and guidance, deal wins and order book, " +
-      "mergers and acquisitions, hiring and attrition, and the demand environment including AI adoption. " +
-      "It shows live market prices for the Indian IT majors and the global peers, a rebased relative performance chart so companies priced in different currencies share one axis, " +
-      "and the Nifty IT index. News is retrieved from Google News RSS and Yahoo Finance RSS. Prices come from the Yahoo Finance chart endpoint. " +
-      "Category labels on news items are assigned by keyword rules, not by a model, and are marked heuristic.",
+      "Sector signal covers the technology, media and telecom universe. Live prices for every constituent and five reference indices, " +
+      "a rebased relative performance chart so names priced in different currencies share one axis, " +
+      "theme exposure showing the average day move across the AI compute, agentic AI, physical AI, cloud, connectivity and streaming cohorts, " +
+      "and coverage across nine standing queries restricted to a verified publisher allowlist. " +
+      "Publisher tiers run primary and wire, financial press, and trade press. Unlisted outlets are discarded at ingestion.",
   },
   {
     id: "product:tab2",
@@ -76,37 +77,38 @@ const PRODUCT_DOCS: RagDoc[] = [
     source: "Console documentation",
     untrusted: false,
     body:
-      "Dashboard two is the quarterly profit and loss statement. It shows the consolidated IFRS income statement from revenue through cost of revenue, " +
-      "gross margin, SG&A expenses, operating income, other income, taxes and net income, each as an absolute figure and as a percent of revenue. " +
-      "It shows the five-quarter revenue and margin trend, expense by nature across thirteen categories, and the cash flow summary including free cash flow and dividends. " +
-      "Amounts can be switched between Indian rupees and US dollars. Company-reported USD figures are shown as the company translated them; " +
-      "derived conversions use the live USD to INR rate and are labelled as derived.",
+      "Quarterly P&L rebuilds the income statement for any company in the coverage universe from SEC XBRL company facts, " +
+      "reading both the US GAAP and IFRS taxonomies so foreign private issuers resolve. " +
+      "Concepts are merged across every tag a filer has used, restated periods take the most recently filed value, " +
+      "and the fourth quarter is derived as full year less three reported quarters and flagged as derived. " +
+      "Companies outside the SEC register, such as the Indian IT majors, are covered by parsing their own published quarterly fact sheets.",
   },
   {
     id: "product:tab3",
-    title: "Dashboard three, KPI Detail",
+    title: "Dashboard three, KPI detail",
     section: "Product",
     source: "Console documentation",
     untrusted: false,
     body:
-      "Dashboard three is KPI Detail. It shows revenue distribution by geography covering North America, Latin America, the United Kingdom, " +
-      "Continental Europe, Asia Pacific, India and the Middle East and Africa, each with quarter on quarter and year on year growth in both constant currency and rupees. " +
-      "It shows revenue distribution by vertical covering BFSI, consumer business, life sciences and healthcare, manufacturing, technology and services, " +
-      "communication and media, energy resources and utilities, and regional markets. " +
-      "It also shows client concentration by revenue band, closing headcount by quarter, voluntary attrition, and workforce diversity.",
+      "KPI detail computes nine quality measures for any company in the universe: gross, operating and net margin, research intensity, " +
+      "cash conversion, free cash margin, receivable days, return on equity and share-based compensation, each with a plain reading of what it indicates. " +
+      "Ratios are computed only where the numerator and denominator cover the same reporting period, and a ratio whose base is too close to zero is suppressed. " +
+      "The benchmark panel compares the subject against its own subsector cohort on the same source and the same rules.",
   },
   {
     id: "product:agents",
-    title: "The due diligence agents",
+    title: "The diligence operating system",
     section: "Product",
     source: "Console documentation",
     untrusted: false,
     body:
-      "The agents console runs seven agents, each with named skills. The Filings Harvester downloads and parses the latest quarterly fact sheet directly from the company investor relations site. " +
-      "The Market Pulse agent pulls live quotes and computes relative performance. The Transaction Scanner reads the news feed for merger and acquisition signals. " +
-      "The Margin Analyst decomposes the operating margin bridge. The Workforce Analyst assesses headcount and attrition. " +
-      "The Currency Normaliser applies the live foreign exchange rate to derived figures. The Diligence Lead composes the other agents' findings into a single review. " +
-      "Each run produces a step-by-step trace, findings with severity, and downloadable artifacts as CSV or JSON.",
+      "The operating system runs forty seven agents across ten workstreams: context and intake, screening and thesis, commercial, financial, " +
+      "operational, legal regulatory and tax, people and culture, ESG and sustainability, synthesis and decision, and portfolio monitoring. " +
+      "Each agent holds a defined role, declares the evidence it needs, and hands to the agent after it. " +
+      "An agent with evidence returns a finding backed by sources. An agent without it returns the document request that would close the gap, " +
+      "with who holds that document. A full review runs screening through to the committee paper carrying findings forward, " +
+      "so the Consistency agent cross-checks every figure and the Adversary agent argues against the assembled case. " +
+      "Human gates mark the agents whose output requires sign-off before a workstream closes.",
   },
   {
     id: "product:provenance",
@@ -116,10 +118,11 @@ const PRODUCT_DOCS: RagDoc[] = [
     untrusted: false,
     body:
       "Every figure carries one of five provenance markers. Live means fetched from the upstream source on this request. " +
-      "Cached means served from the local cache because upstream was not re-contacted or was unreachable. " +
-      "Filing means parsed from a company filing document. Baseline means upstream failed and the checked-in verified dataset was substituted. " +
+      "Cached means served from the local cache with its retrieval time shown. " +
+      "Filing means parsed from a regulatory filing or a company's own published document. " +
+      "Baseline means the source refuses this host's network, so a dated snapshot taken where the fetch succeeds was used, and the date is shown. " +
       "Unavailable means there is nothing to show and the field reads Not set. " +
-      "Nothing on this console is estimated, modelled or interpolated. If a figure was not in the source, it is not displayed.",
+      "Nothing on this console is estimated, modelled or interpolated.",
   },
   {
     id: "product:security",
@@ -128,12 +131,10 @@ const PRODUCT_DOCS: RagDoc[] = [
     source: "Console documentation",
     untrusted: false,
     body:
-      "The console refuses automated clients, rate limits every class of request, and rejects cross-origin calls to its JSON endpoints. " +
-      "A strict content security policy permits no external origin for scripts, styles, fonts or frames, so there is no channel to send rendered data to a third party host. " +
-      "Robots directives refuse all crawlers including the named AI ingestion agents. " +
-      "There is no SQL database in this application, which removes SQL injection structurally. " +
-      "Text arriving from third parties, such as news headlines and filing lines, is stripped of markup and control characters, " +
-      "and instruction-shaped phrasing is defanged before it can reach a model prompt.",
+      "The console refuses automated clients, rate limits every class of request, and rejects cross-origin calls to its endpoints. " +
+      "A strict content security policy permits no external origin, so there is no channel to send rendered data to a third party host. " +
+      "There is no database and no server-side storage: uploaded documents are parsed in the request that carries them and returned to the browser, which holds them for the tab session only. " +
+      "Text arriving from third parties is stripped of markup and control characters, and instruction-shaped phrasing is defanged before it can reach a model prompt.",
   },
 ];
 

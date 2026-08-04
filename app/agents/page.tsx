@@ -143,7 +143,7 @@ export default function OperatingSystemPage() {
       <PageHeader
         index="05"
         title="Diligence operating system"
-        lede={`${AGENTS.length} seats across ten workstreams. Each holds a defined role, declares the evidence it needs, and hands to the seat after it. A seat with evidence returns a finding. A seat without it returns the document request that would close the gap, because an open item is more useful than an invented answer.`}
+        lede={`${AGENTS.length} agents across ten workstreams. Each holds a defined role, declares the evidence it needs, and hands to the agent after it. An agent with evidence returns a finding. An agent without it returns the document request that would close the gap, because an open item is more useful than an invented answer.`}
       />
 
       <Stack gap={32}>
@@ -152,7 +152,7 @@ export default function OperatingSystemPage() {
           hint={
             documents.length > 0
               ? `${documents.length} private document${documents.length === 1 ? "" : "s"} attached in this tab. Seats that read supplied records will use them.`
-              : "Attach private documents on the Company research page to unlock the seats that read management information."
+              : "Attach private documents on the Company research page to unlock the agents that read management information."
           }
         >
           <div style={{ display: "grid", gap: 20 }}>
@@ -193,7 +193,7 @@ export default function OperatingSystemPage() {
                 >
                   <span className="ws-step">All</span>
                   <span className="ws-name">Full review</span>
-                  <span className="ws-count">{AGENTS.filter((a) => a.workstream !== "monitoring").length} seats</span>
+                  <span className="ws-count">{AGENTS.filter((a) => a.workstream !== "monitoring").length} agents</span>
                 </button>
                 {WORKSTREAMS.map((w) => {
                   const count = AGENTS.filter((a) => a.workstream === w.id).length;
@@ -208,7 +208,7 @@ export default function OperatingSystemPage() {
                     >
                       <span className="ws-step">{w.step}</span>
                       <span className="ws-name">{w.name}</span>
-                      <span className="ws-count">{count} seats</span>
+                      <span className="ws-count">{count} agents</span>
                     </button>
                   );
                 })}
@@ -228,7 +228,7 @@ export default function OperatingSystemPage() {
                 <>
                   <strong style={{ fontWeight: 600 }}>Full review.</strong> Runs
                   screening through to the committee paper in order, carrying
-                  findings forward so the synthesis seats reconcile against the
+                  findings forward so the synthesis agents reconcile against the
                   whole case rather than one step. The record is assembled once
                   and shared, so a full pass costs one research call.{" "}
                   <em style={{ fontStyle: "normal", color: "var(--text-muted)" }}>
@@ -292,7 +292,7 @@ export default function OperatingSystemPage() {
               {([
                 ["findings", `Findings (${run.findings.length})`],
                 ["gaps", `Open items (${run.gaps.length})`],
-                ["seats", `Seats (${run.seats.length})`],
+                ["seats", `Agents (${run.seats.length})`],
               ] as const).map(([k, label]) => (
                 <button
                   key={k}
@@ -308,12 +308,12 @@ export default function OperatingSystemPage() {
             </div>
 
             {view === "findings" && (
-              <Panel title="Findings" hint="Computed from the assembled record. Each carries the seat that produced it.">
+              <Panel title="Findings" hint="Computed from the assembled record. Each carries the agent that produced it.">
                 {run.findings.length === 0 ? (
                   <div className="empty">
                     <p className="empty-title">No findings in this workstream</p>
                     <p className="empty-body">
-                      Every seat here is blocked on evidence. Review the open items for the documents that would unblock them.
+                      Every agent here is blocked on evidence. Review the open items for the documents that would unblock them.
                     </p>
                   </div>
                 ) : (
@@ -349,7 +349,7 @@ export default function OperatingSystemPage() {
                 {run.gaps.length === 0 ? (
                   <div className="empty">
                     <p className="empty-title">No open items</p>
-                    <p className="empty-body">Every seat in this workstream had the evidence it needs.</p>
+                    <p className="empty-body">Every agent in this workstream had the evidence it needs.</p>
                   </div>
                 ) : (
                   <div className="tbl-scroll">
@@ -360,7 +360,7 @@ export default function OperatingSystemPage() {
                           <th scope="col">Item</th>
                           <th scope="col">Blocks</th>
                           <th scope="col">Request from</th>
-                          <th scope="col">Seat</th>
+                          <th scope="col">Agent</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -397,7 +397,7 @@ export default function OperatingSystemPage() {
             )}
 
             {view === "seats" && (
-              <Panel title="Seats" hint="Every seat in the workstream, what it holds, and where it hands off.">
+              <Panel title="Agents" hint="Every agent in the workstream, what it holds, and where it hands off.">
                 <div style={{ display: "grid", gap: 0 }}>
                   {run.seats.map((seat) => (
                     <div key={seat.agentId} className="seat-row">
@@ -428,7 +428,7 @@ export default function OperatingSystemPage() {
         {!run && !busy && (
           <Panel
             title="The full roster"
-            hint={`${AGENTS.length} seats. Select a workstream above to run one, or read what each seat is for.`}
+            hint={`${AGENTS.length} agents. Select a workstream above to run one, or read what each agent is for.`}
           >
             <div style={{ display: "grid", gap: 28 }}>
               {WORKSTREAMS.map((w) => (

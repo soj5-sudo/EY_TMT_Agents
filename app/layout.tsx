@@ -1,5 +1,16 @@
 import type { Metadata, Viewport } from "next";
+import { Noto_Sans } from "next/font/google";
 import "./globals.css";
+
+// EY ships "EYInterstate, Noto Sans, sans-serif". EYInterstate is a licensed
+// face, so Noto Sans is the first stop every visitor actually reaches. Served
+// from this origin via next/font, which keeps the CSP at 'self'.
+const notoSans = Noto_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-noto",
+  display: "swap",
+});
 import { EyLogo } from "@/components/ui/EyLogo";
 import { MegaNav } from "@/components/ui/MegaNav";
 import { Assistant } from "@/components/Assistant";
@@ -28,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={notoSans.variable}>
       <body>
         <a href="#main" className="skip">
           Skip to content

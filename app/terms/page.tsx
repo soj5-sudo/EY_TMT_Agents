@@ -28,7 +28,7 @@ export default function TermsPage() {
           <p>
             A working tool for analysts covering technology, media and telecom. It
             assembles evidence from public filings, market data and verified
-            press, runs it through a set of specialist seats, and produces
+            press, runs it through a set of specialist agents, and produces
             findings with the source attached to each one.
           </p>
           <p>
@@ -98,7 +98,7 @@ export default function TermsPage() {
               used.
             </li>
             <li>
-              A seat with no evidence raises a document request rather than
+              An agent with no evidence raises a document request rather than
               producing an answer.
             </li>
           </ul>
@@ -114,7 +114,7 @@ export default function TermsPage() {
           <p>
             {UNIVERSE.length} listed companies across technology, media and
             telecom, plus on-demand research against any company in the SEC
-            register. {AGENTS.length} seats across {WORKSTREAMS.length}{" "}
+            register. {AGENTS.length} agents across {WORKSTREAMS.length}{" "}
             workstreams.
           </p>
 

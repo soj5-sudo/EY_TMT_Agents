@@ -1,15 +1,15 @@
 /**
  * Agent registry.
  *
- * The unit of work is not a prompt, it is a seat. Each seat has a defined role,
- * a declared evidence contract, and a named handoff to the seat after it. That
+ * The unit of work is not a prompt, it is an agent. Each agent has a defined role,
+ * a declared evidence contract, and a named handoff to the agent after it. That
  * is what makes a run repeatable: the same company through the same workstream
  * produces the same structure of output every time, and any figure can be
- * traced back to the seat and the source that produced it.
+ * traced back to the agent and the source that produced it.
  *
  * An agent emits one of two things. A finding, which is backed by evidence and
  * carries its provenance. Or a gap, which names the document that would close
- * it. A seat that lacks evidence never guesses; it raises the request. That is
+ * it. An agent that lacks evidence never guesses; it raises the request. That is
  * how a real diligence checklist behaves and it is the reason output from this
  * system is usable in a committee paper.
  */
@@ -41,7 +41,7 @@ export const WORKSTREAMS: Workstream[] = [
     step: "00",
     name: "Context and intake",
     purpose:
-      "Establish who the subject is and assemble the shared record every later seat reads from.",
+      "Establish who the subject is and assemble the shared record every later agent reads from.",
     closes: "The subject is identified and the evidence base is known.",
   },
   {
@@ -134,15 +134,15 @@ export interface AgentSkill {
 
 export interface AgentDef {
   id: string;
-  /** Short working name. This is what appears on the seat in the console. */
+  /** Short working name. This is what appears on the agent in the console. */
   name: string;
   workstream: WorkstreamId;
   role: string;
-  /** Why the seat exists. What goes wrong when nobody holds it. */
+  /** Why the agent exists. What goes wrong when nobody holds it. */
   why: string;
   skills: AgentSkill[];
   needs: EvidenceKind[];
-  /** Seats this one hands its output to. */
+  /** Agents this one hands its output to. */
   handsTo: string[];
   /** True when a person must sign the output before the workstream advances. */
   humanGate: boolean;
@@ -161,7 +161,7 @@ export const AGENTS: AgentDef[] = [
     name: "Search",
     workstream: "context",
     role: "Find the subject and everything public about it",
-    why: "Every later seat reads from what this one finds. Get the entity wrong and the whole run is about a different company, which is the most expensive error in the process and the hardest to notice late.",
+    why: "Every later agent reads from what this one finds. Get the entity wrong and the whole run is about a different company, which is the most expensive error in the process and the hardest to notice late.",
     skills: [
       s("resolve", "Resolve entity", "Match the name to a registrant, ticker and filing history."),
       s("register", "Pull the register", "Retrieve the filing index and classification from the regulator."),
@@ -193,7 +193,7 @@ export const AGENTS: AgentDef[] = [
     name: "Explain",
     workstream: "context",
     role: "Say what a figure means in plain language",
-    why: "A number without an interpretation gets read differently by every person around the table. This seat writes the one-line reading so the committee argues about the decision rather than about what the metric was.",
+    why: "A number without an interpretation gets read differently by every person around the table. This agent writes the one-line reading so the committee argues about the decision rather than about what the metric was.",
     skills: [
       s("define", "Define the metric", "State what the measure is and what it excludes."),
       s("benchmark", "Set the reference", "Give the range that counts as normal for this sector."),
@@ -351,7 +351,7 @@ export const AGENTS: AgentDef[] = [
     name: "Revenue quality",
     workstream: "financial",
     role: "Test whether revenue is real and repeatable",
-    why: "Recognition policy, channel loading and one-off contracts can carry a reported line that will not repeat. This is the seat that decides whether the top line is a base or a peak.",
+    why: "Recognition policy, channel loading and one-off contracts can carry a reported line that will not repeat. This is the agent that decides whether the top line is a base or a peak.",
     skills: [
       s("recognition", "Check recognition", "Policy and any change in it across the period."),
       s("repeatability", "Test repeatability", "Recurring against one-off composition."),
@@ -411,7 +411,7 @@ export const AGENTS: AgentDef[] = [
     name: "Quality of earnings",
     workstream: "financial",
     role: "Restate earnings to a defensible base",
-    why: "The number the deal is priced on is almost never the number in the accounts. This seat produces the adjusted figure and, more importantly, the list of adjustments somebody has to defend.",
+    why: "The number the deal is priced on is almost never the number in the accounts. This agent produces the adjusted figure and, more importantly, the list of adjustments somebody has to defend.",
     skills: [
       s("adjustments", "Schedule adjustments", "Non-recurring, owner and pro-forma items."),
       s("run-rate", "Set the run rate", "The base a forward multiple should apply to."),
@@ -627,7 +627,7 @@ export const AGENTS: AgentDef[] = [
     name: "Culture",
     workstream: "people",
     role: "Read the operating culture from observable evidence",
-    why: "Culture is usually asserted and rarely evidenced. Attrition, disputes and the pattern of departures are the parts that leave a record, and those are what this seat reads.",
+    why: "Culture is usually asserted and rarely evidenced. Attrition, disputes and the pattern of departures are the parts that leave a record, and those are what this agent reads.",
     skills: [
       s("attrition-read", "Read attrition", "Rate against the headcount direction, not alone."),
       s("signals", "Collect signals", "Observable indicators in the public record."),
@@ -704,7 +704,7 @@ export const AGENTS: AgentDef[] = [
     name: "Governance",
     workstream: "esg",
     role: "Test the control environment",
-    why: "Governance is the seat that predicts the others. Weak control is why restatements, disputes and misreporting happen, so a finding here upgrades the risk on every workstream.",
+    why: "Governance is the agent that predicts the others. Weak control is why restatements, disputes and misreporting happen, so a finding here upgrades the risk on every workstream.",
     skills: [
       s("board", "Read the board", "Composition and independence."),
       s("controls", "Test controls", "Auditor tenure, changes and reported weaknesses."),
@@ -736,7 +736,7 @@ export const AGENTS: AgentDef[] = [
     name: "Structure the deal",
     workstream: "synthesis",
     role: "Convert findings into terms",
-    why: "Most diligence findings are not reasons to walk, they are reasons to change the terms. This seat converts each one into the mechanism that covers it.",
+    why: "Most diligence findings are not reasons to walk, they are reasons to change the terms. This agent converts each one into the mechanism that covers it.",
     skills: [
       s("price-adjust", "Adjust price", "Findings that move the number."),
       s("protection", "Design protection", "Indemnity, escrow and earn-out against specific risks."),
@@ -751,7 +751,7 @@ export const AGENTS: AgentDef[] = [
     name: "Consistency",
     workstream: "synthesis",
     role: "Cross-check every figure against its source",
-    why: "This is the seat that catches the number written two different ways in the same document. It is unglamorous and it is the reason the paper survives contact with a committee.",
+    why: "This is the agent that catches the number written two different ways in the same document. It is unglamorous and it is the reason the paper survives contact with a committee.",
     skills: [
       s("cross-check", "Cross-check figures", "Every stated figure against the underlying record."),
       s("unit-check", "Check units", "Currency, scale and period consistency."),
@@ -766,7 +766,7 @@ export const AGENTS: AgentDef[] = [
     name: "Adversary",
     workstream: "synthesis",
     role: "Attack the case before anyone else does",
-    why: "A process that only gathers supporting evidence will always recommend proceeding. This seat argues the other side on purpose, so the weakest point is found internally rather than by a counterparty.",
+    why: "A process that only gathers supporting evidence will always recommend proceeding. This agent argues the other side on purpose, so the weakest point is found internally rather than by a counterparty.",
     skills: [
       s("refute", "Refute the thesis", "Build the case for passing."),
       s("stress", "Stress the assumptions", "Which assumption breaks the return."),
@@ -829,7 +829,7 @@ export const AGENTS: AgentDef[] = [
     name: "Runway",
     workstream: "monitoring",
     role: "Recompute runway from actuals and fire on thresholds",
-    why: "A bridge conversation at eleven months of runway is a negotiation. At seven it is a rescue. Same company, same facts, different price. This seat exists to move the conversation earlier.",
+    why: "A bridge conversation at eleven months of runway is a negotiation. At seven it is a rescue. Same company, same facts, different price. This agent exists to move the conversation earlier.",
     skills: [
       s("burn", "Recompute burn", "From actuals rather than the last plan."),
       s("months", "Compute months", "Runway at current and at stressed burn."),
@@ -878,7 +878,7 @@ export const AGENTS: AgentDef[] = [
     skills: [
       s("draft-letter", "Draft", "Compose from reconciled figures only."),
       s("position", "State positions", "Holding-level performance and status."),
-      s("consistency-hook", "Hand to consistency", "Pass to the checking seat before release."),
+      s("consistency-hook", "Hand to consistency", "Pass to the checking agent before release."),
     ],
     needs: ["prior-findings"],
     handsTo: ["consistency"],

@@ -1,12 +1,12 @@
 /**
  * Workstream execution.
  *
- * One shared record is assembled first, then every seat in the workstream reads
- * from it. Seats do not call each other; the record is the interface, which is
- * what keeps a run reproducible and lets any seat be replaced without touching
+ * One shared record is assembled first, then every agent in the workstream reads
+ * from it. Agents do not call each other; the record is the interface, which is
+ * what keeps a run reproducible and lets any agent be replaced without touching
  * the others.
  *
- * A seat returns findings, gaps, or both. A finding carries evidence. A gap
+ * An agent returns findings, gaps, or both. A finding carries evidence. A gap
  * names the document that would close it and who normally holds it. Nothing is
  * inferred to fill a hole, because a fabricated finding in a committee paper is
  * worse than an open item on a request list.
@@ -189,10 +189,10 @@ class Emitter {
 /* ------------------------------------------------------------------ *
  * Seat implementations
  *
- * Only seats that can compute something from the assembled record have an
+ * Only agents that can compute something from the assembled record have an
  * implementation. Every other seat runs the default path, which reports what
  * it holds and raises a gap for what it does not. That is a deliberate choice:
- * a seat with no evidence should produce a request, not prose.
+ * an agent with no evidence should produce a request, not prose.
  * ------------------------------------------------------------------ */
 
 type SeatFn = (d: CompanyDossier, e: Emitter, prior: Finding[]) => void;
@@ -209,36 +209,87 @@ const SEATS: Partial<Record<string, SeatFn>> = {
           `. ${d.filings.length} material filings and ${d.news.length} verified items of coverage are on the record.`,
         { label: "Filings on record", value: String(d.filings.length) },
       );
-    } else {
-      e.gap(
-        "Entity identification",
-        "No later seat can be trusted until the subject is pinned to a specific legal entity.",
-        "Confirm the registered name, or supply the certificate of incorporation",
-        "high",
-      );
+      return;
     }
+
+    // Not an SEC registrant. A universe listing with harvested IR documents is
+    // still a positive identification: the subject is pinned to one listed
+    // entity and its own published record.
+    if (d.resolved.inUniverse) {
+      const c = d.resolved.inUniverse;
+      e.find(
+        "info",
+        `Subject resolved to ${d.resolved.name}`,
+        `Listed as ${c.symbol} (${c.region}), ${c.subsector.toLowerCase()} within ${c.sector.toLowerCase()}. ` +
+          `Not a US registrant, so the reported record comes from the company's own investor relations documents: ` +
+          `${d.irQuarters.length} quarterly fact sheet${d.irQuarters.length === 1 ? "" : "s"} parsed` +
+          (d.irUrl ? ` from ${new URL(d.irUrl).hostname}` : "") +
+          `, alongside ${d.news.length} verified items of coverage.`,
+        { label: "IR quarters on record", value: String(d.irQuarters.length) },
+      );
+      if (d.irQuarters.length === 0) {
+        e.gap(
+          "Quarterly fact sheets from investor relations",
+          "The entity is identified, but without its published documents the reported record is empty.",
+          "Company investor relations site",
+          "high",
+        );
+      }
+      return;
+    }
+
+    e.gap(
+      "Entity identification",
+      "No later agent can be trusted until the subject is pinned to a specific legal entity.",
+      "Confirm the registered name, or supply the certificate of incorporation",
+      "high",
+    );
   },
 
   intake: (d, e) => {
-    if (d.documents.length === 0) {
+    const supplied = d.documents.length;
+    const harvested = d.irQuarters.length;
+
+    if (supplied > 0) {
+      const figures = d.documents.reduce((s, x) => s + x.extracted.length, 0);
+      e.find(
+        "info",
+        `${supplied} supplied document${supplied === 1 ? "" : "s"} normalised`,
+        d.documents
+          .map((x) => `${x.name}, ${x.pages ?? "unknown"} pages, ${x.extracted.length} tagged figures`)
+          .join("; ") +
+          `. ${figures} figures were recovered with their surrounding context retained for audit.`,
+        { label: "Tagged figures", value: String(figures) },
+      );
+    }
+
+    if (harvested > 0) {
+      const latest = d.irQuarters[d.irQuarters.length - 1];
+      e.find(
+        "info",
+        `${harvested} published quarterly document${harvested === 1 ? "" : "s"} ingested from investor relations`,
+        `Fact sheets fetched and parsed directly from the company's own site, covering ${d.irQuarters[0].label} to ${latest.label}. ` +
+          `Each was normalised into the shared schema: revenue, margins, headcount, attrition and order book where the document reports them. ` +
+          `These are public records, so no data-room access was needed to assemble them.`,
+        { label: "Public documents", value: String(harvested) },
+      );
+    }
+
+    if (supplied === 0 && harvested === 0) {
       e.gap(
         "Management pack, trial balance and KPI file",
         "Without supplied records the run is limited to the public register, which excludes management accounts, contracts and customer detail.",
         GAP_REQUEST["provided-documents"],
         "high",
       );
-      return;
+    } else if (supplied === 0) {
+      e.gap(
+        "Management pack and trial balance",
+        "The public record is assembled. A management pack would add the customer, contract and cost detail the published documents do not carry.",
+        GAP_REQUEST["provided-documents"],
+        "low",
+      );
     }
-    const figures = d.documents.reduce((s, x) => s + x.extracted.length, 0);
-    e.find(
-      "info",
-      `${d.documents.length} supplied document${d.documents.length === 1 ? "" : "s"} normalised`,
-      d.documents
-        .map((x) => `${x.name}, ${x.pages ?? "unknown"} pages, ${x.extracted.length} tagged figures`)
-        .join("; ") +
-        `. ${figures} figures were recovered with their surrounding context retained for audit.`,
-      { label: "Tagged figures", value: String(figures) },
-    );
   },
 
   screen: (d, e) => {
@@ -613,7 +664,7 @@ const SEATS: Partial<Record<string, SeatFn>> = {
       e.find(
         "info",
         `${byLabel.size} distinct metrics cross-checked, no conflicts`,
-        "Every figure asserted more than once carries the same value across seats. This is the check that catches a number written two different ways in one paper.",
+        "Every figure asserted more than once carries the same value across agents. This is the check that catches a number written two different ways in one paper.",
         { label: "Metrics checked", value: String(byLabel.size) },
       );
     } else {
@@ -664,7 +715,7 @@ const SEATS: Partial<Record<string, SeatFn>> = {
         : "No structural argument for passing identified on the current record",
       arguments_.length > 0
         ? `Argued deliberately against the case: ${arguments_.join("; ")}. ` +
-          `This seat exists because a process that only gathers supporting evidence always recommends proceeding.`
+          `This agent exists because a process that only gathers supporting evidence always recommends proceeding.`
         : `On the evidence assembled, no structural argument for passing emerges. That is a statement about the evidence available, not a recommendation.`,
       { label: "Counter-arguments", value: String(arguments_.length) },
     );
@@ -688,7 +739,7 @@ const SEATS: Partial<Record<string, SeatFn>> = {
         (risk.length
           ? `Leading risk: ${risk[0].headline}. `
           : "No risk-rated finding was raised. ") +
-        `Every claim in the paper indexes to the seat and the source that produced it. Open items travel with the paper rather than being resolved in it.`,
+        `Every claim in the paper indexes to the agent and the source that produced it. Open items travel with the paper rather than being resolved in it.`,
       { label: "Findings", value: String(prior.length) },
     );
   },
@@ -707,7 +758,7 @@ const SEATS: Partial<Record<string, SeatFn>> = {
       "info",
       `${d.documents.length} reporting pack${d.documents.length === 1 ? "" : "s"} normalised to one schema`,
       d.documents.map((x) => `${x.name}, ${x.extracted.length} figures`).join("; ") +
-        ". Format differences between senders are absorbed here so the reconciliation seat compares like with like.",
+        ". Format differences between senders are absorbed here so the reconciliation agent compares like with like.",
       { label: "Packs", value: String(d.documents.length) },
     );
   },
@@ -753,7 +804,7 @@ function runDefaultSeat(agent: AgentDef, available: Set<EvidenceKind>, e: Emitte
     e.find(
       "info",
       `${agent.name} has its evidence base but no automated test`,
-      `${agent.role}. The evidence this seat requires is present. Its assessment is judgement work that is recorded here rather than computed, and is owned by the reviewer.`,
+      `${agent.role}. The evidence this agent requires is present. Its assessment is judgement work that is recorded here rather than computed, and is owned by the reviewer.`,
     );
     return;
   }
@@ -863,11 +914,11 @@ export async function runWorkstream(
       .filter((a) => a.humanGate)
       .map((a) => ({ agentId: a.id, agentName: a.name, role: a.role })),
     summary:
-      `${ws.name} ran ${seats.length} seats against ${dossier.resolved.name}. ` +
+      `${ws.name} ran ${seats.length} agents against ${dossier.resolved.name}. ` +
       `${produced.length} findings (${risk} risk, ${attention} attention) and ${allGaps.length} open items. ` +
       (blocked
-        ? `${blocked} seats are blocked pending evidence. `
-        : "Every seat had its evidence base. ") +
+        ? `${blocked} agents are blocked pending evidence. `
+        : "Every agent had its evidence base. ") +
       `Closes when: ${ws.closes.toLowerCase()}`,
     dossier,
   };
@@ -941,9 +992,9 @@ export async function runFullReview(
     ),
     summary:
       `Full review of ${dossier.resolved.name} across ${runs.length} workstreams and ` +
-      `${runs.reduce((n, r) => n + r.seats.length, 0)} seats. ` +
+      `${runs.reduce((n, r) => n + r.seats.length, 0)} agents. ` +
       `${findings.length} findings (${risk} risk, ${attention} attention) and ${gaps.length} open items. ` +
-      `${runs.flatMap((r) => r.gates).length} seats require sign-off before the paper is circulated.`,
+      `${runs.flatMap((r) => r.gates).length} agents require sign-off before the paper is circulated.`,
   };
 }
 

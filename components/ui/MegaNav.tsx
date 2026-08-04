@@ -52,9 +52,9 @@ const TOOLS: Destination[] = [
     index: "05",
     href: "/agents",
     title: "Diligence OS",
-    summary: "Forty seven seats, ten workstreams",
+    summary: "Forty seven agents, ten workstreams",
     detail:
-      "Screening through to committee paper, plus portfolio monitoring. Each seat holds a role, declares its evidence, and hands to the next. Gaps become the document request list.",
+      "Screening through to committee paper, plus portfolio monitoring. Each agent holds a role, declares its evidence, and hands to the next. Gaps become the document request list.",
   },
 ];
 

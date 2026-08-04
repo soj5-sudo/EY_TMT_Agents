@@ -13,6 +13,14 @@
  */
 
 import { cached } from "@/lib/core/cache";
+import {
+  IR_SOURCES,
+  irSourceFor,
+  parseIrQuarter,
+  type IrDocRef,
+  type IrQuarter,
+} from "@/lib/feeds/ir-parse";
+import { IR_SNAPSHOT, IR_SNAPSHOT_TAKEN } from "@/lib/data/ir-snapshot";
 import { fetchBuffer, safeFetch } from "@/lib/core/fetcher";
 import { extractPdfText, PdfParseError } from "@/lib/pdf/extract";
 import type { Envelope, Provenance } from "@/lib/core/types";
@@ -21,168 +29,16 @@ import { nowIso } from "@/lib/core/types";
 const DOC_TTL_MS = 12 * 60 * 60 * 1000;
 const HISTORY_TTL_MS = 6 * 60 * 60 * 1000;
 
-export interface IrDocRef {
-  label: string;
-  fiscalYear: string;
-  quarter: 1 | 2 | 3 | 4;
-  url: string;
-}
-
-export interface IrQuarter {
-  label: string;
-  url: string;
-  revenueInrMn: number | null;
-  revenueUsdMn: number | null;
-  operatingMarginPct: number | null;
-  netMarginPct: number | null;
-  headcount: number | null;
-  attritionLtmPct: number | null;
-  orderBookUsdBn: number | null;
-  ccGrowthYoyPct: number | null;
-  inrGrowthYoyPct: number | null;
-  /** Fraction of expected fields recovered. */
-  confidence: number;
-}
-
 export interface IrProfile {
   symbol: string;
   name: string;
   /** Where the documents live, for the source link. */
   irUrl: string;
   quarters: IrQuarter[];
-}
-
-/* ---------------------------------------------------------------- *
- * Document paths
- * ---------------------------------------------------------------- */
-
-/**
- * Indian fiscal years run April to March. A quarter's fact sheet lands roughly
- * three to four weeks after the quarter closes.
- */
-function indianQuarters(now: Date, count: number): Array<{ fy: string; q: 1 | 2 | 3 | 4; label: string }> {
-  const month = now.getUTCMonth();
-  const year = now.getUTCFullYear();
-
-  let fyStart = month >= 3 ? year : year - 1;
-  let q: 1 | 2 | 3 | 4;
-  if (month >= 6 && month <= 8) q = 1;
-  else if (month >= 9 && month <= 11) q = 2;
-  else if (month >= 0 && month <= 2) q = 3;
-  else q = 4;
-
-  if (q === 4) fyStart -= 1;
-
-  const out: Array<{ fy: string; q: 1 | 2 | 3 | 4; label: string }> = [];
-  for (let i = 0; i < count; i++) {
-    const fy = `${fyStart}-${String((fyStart + 1) % 100).padStart(2, "0")}`;
-    out.push({ fy, q, label: `Q${q} FY${String((fyStart + 1) % 100).padStart(2, "0")}` });
-    if (q === 1) {
-      q = 4;
-      fyStart -= 1;
-    } else {
-      q = (q - 1) as 1 | 2 | 3;
-    }
-  }
-  return out;
-}
-
-interface IrSource {
-  symbol: string;
-  name: string;
-  irUrl: string;
-  build(now: Date, count: number): IrDocRef[];
-}
-
-export const IR_SOURCES: IrSource[] = [
-  {
-    symbol: "TCS.NS",
-    name: "Tata Consultancy Services",
-    irUrl: "https://www.tcs.com/investor-relations/financial-statements",
-    build: (now, count) =>
-      indianQuarters(now, count).map(({ fy, q, label }) => ({
-        label,
-        fiscalYear: fy,
-        quarter: q,
-        url:
-          "https://www.tcs.com/content/dam/tcs/investor-relations/financial-statements/" +
-          `${fy}/q${q}/Presentations/${encodeURIComponent(`Q${q} ${fy} Fact Sheet.pdf`)}`,
-      })),
-  },
-];
-
-export function irSourceFor(symbol: string): IrSource | null {
-  return IR_SOURCES.find((s) => s.symbol === symbol) ?? null;
-}
-
-/* ---------------------------------------------------------------- *
- * Parsing
- * ---------------------------------------------------------------- */
-
-function num(raw: string | undefined): number | null {
-  if (!raw) return null;
-  const v = Number(raw.replace(/[,\s]/g, ""));
-  return Number.isFinite(v) ? v : null;
-}
-
-function firstMatch(lines: string[], re: RegExp): RegExpMatchArray | null {
-  for (const line of lines) {
-    const m = line.match(re);
-    if (m) return m;
-  }
-  return null;
-}
-
-/**
- * Reads the headline block of a quarterly fact sheet.
- *
- * The currency glyph does not survive the subset-font mapping in these decks,
- * so the prefixes ("INR Revenue of", "USD Revenue of") are the anchors rather
- * than the symbol.
- */
-export function parseIrQuarter(lines: string[], ref: IrDocRef): IrQuarter {
-  const inr = firstMatch(
-    lines,
-    /INR Revenue of\s*\D{0,3}\s*([\d,]+)\s*Mn[^|]*?(?:up|down)\s*(-?[\d.]+)%\s*YoY/i,
-  );
-  const usd = firstMatch(lines, /USD Revenue of\s*\D{0,3}\s*([\d,]+)\s*Mn/i);
-  const cc = firstMatch(
-    lines,
-    /Constant currency revenue[^|]*?(?:up|down)\s*(-?[\d.]+)%\s*YoY/i,
-  );
-  const op = firstMatch(lines, /Operating Margin at\s*(-?[\d.]+)\s*%/i);
-  const net = firstMatch(lines, /Net Margin at\s*(-?[\d.]+)\s*%/i);
-  const head = firstMatch(lines, /Closing headcount\s*:?\s*([\d,]+)/i);
-  const attr = firstMatch(lines, /LTM attrition at\s*([\d.]+)\s*%/i);
-  const tcv = firstMatch(lines, /Order book TCV at\s*\$?\s*([\d.]+)\s*Bn/i);
-
-  const q: IrQuarter = {
-    label: ref.label,
-    url: ref.url,
-    revenueInrMn: num(inr?.[1]),
-    revenueUsdMn: num(usd?.[1]),
-    inrGrowthYoyPct: num(inr?.[2]),
-    ccGrowthYoyPct: num(cc?.[1]),
-    operatingMarginPct: num(op?.[1]),
-    netMarginPct: num(net?.[1]),
-    headcount: num(head?.[1]),
-    attritionLtmPct: num(attr?.[1]),
-    orderBookUsdBn: num(tcv?.[1]),
-    confidence: 0,
-  };
-
-  const fields = [
-    q.revenueInrMn,
-    q.revenueUsdMn,
-    q.operatingMarginPct,
-    q.netMarginPct,
-    q.headcount,
-    q.attritionLtmPct,
-    q.orderBookUsdBn,
-  ];
-  q.confidence = fields.filter((f) => f !== null).length / fields.length;
-
-  return q;
+  /** Why each document that failed did so. Silent skipping makes a blocked
+   *  host indistinguishable from an unpublished quarter, which is exactly the
+   *  ambiguity that wastes an afternoon. */
+  attempts: Array<{ label: string; ok: boolean; reason: string | null }>;
 }
 
 /* ---------------------------------------------------------------- *
@@ -220,17 +76,34 @@ export async function getIrHistory(
   const res = await cached(`ir:history:${symbol}:${count}`, HISTORY_TTL_MS, async () => {
     const refs = source.build(new Date(), count);
     const quarters: IrQuarter[] = [];
+    const attempts: IrProfile["attempts"] = [];
 
     for (const ref of refs) {
       try {
         const q = await fetchQuarter(ref);
-        // A parse that recovered almost nothing means the layout moved. Keep it
-        // out rather than letting a half-read document into a trend.
-        if (q && q.confidence >= 0.4) quarters.push(q);
+        if (q && q.confidence >= 0.4) {
+          quarters.push(q);
+          attempts.push({ label: ref.label, ok: true, reason: null });
+        } else {
+          attempts.push({
+            label: ref.label,
+            ok: false,
+            reason: q
+              ? `Parsed but only ${Math.round(q.confidence * 100)} percent of expected fields were recovered`
+              : "No content returned",
+          });
+        }
       } catch (err) {
-        if (err instanceof PdfParseError) continue;
-        // 404 on an unpublished quarter is normal. Anything else is skipped too,
-        // because one bad document should not fail the series.
+        attempts.push({
+          label: ref.label,
+          ok: false,
+          reason:
+            err instanceof PdfParseError
+              ? `Document unreadable: ${err.message}`
+              : err instanceof Error
+                ? err.message
+                : String(err),
+        });
       }
       await new Promise((r) => setTimeout(r, 200));
     }
@@ -243,8 +116,42 @@ export async function getIrHistory(
       name: source.name,
       irUrl: source.irUrl,
       quarters,
+      attempts,
     } satisfies IrProfile;
   });
+
+  // Several publishers refuse datacentre IP ranges, so a deployed instance is
+  // blocked where a workstation is not. The snapshot is the same documents,
+  // harvested where the fetch succeeds, and it is labelled as such rather than
+  // presented as live.
+  if (res.value.quarters.length === 0) {
+    const snap = IR_SNAPSHOT[symbol];
+    if (snap && snap.quarters.length > 0) {
+      const blocked = res.value.attempts.some((a) =>
+        (a.reason ?? "").includes("403"),
+      );
+      return {
+        data: {
+          symbol,
+          name: snap.name,
+          irUrl: snap.irUrl,
+          quarters: snap.quarters,
+          attempts: res.value.attempts,
+        },
+        provenance: {
+          kind: "baseline",
+          source: `${snap.name} investor relations, quarterly fact sheets`,
+          url: snap.irUrl,
+          retrievedAt: IR_SNAPSHOT_TAKEN,
+          note:
+            `${snap.quarters.length} quarters parsed from the published documents on ${IR_SNAPSHOT_TAKEN}. ` +
+            (blocked
+              ? "The publisher refuses requests from this host's network, so a live fetch is not possible from the deployment."
+              : "A live fetch did not succeed on this request."),
+        },
+      };
+    }
+  }
 
   return {
     data: res.value,
@@ -255,8 +162,11 @@ export async function getIrHistory(
       retrievedAt: new Date(res.storedAt).toISOString(),
       note:
         res.value.quarters.length > 0
-          ? `${res.value.quarters.length} quarters parsed directly from the published documents.`
-          : "No fact sheet could be retrieved or parsed.",
+          ? `${res.value.quarters.length} of ${res.value.attempts.length} candidate documents parsed.`
+          : `No document could be read. ${res.value.attempts
+              .slice(0, 3)
+              .map((a) => `${a.label}: ${a.reason}`)
+              .join("; ")}`,
     },
   };
 }

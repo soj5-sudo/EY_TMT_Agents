@@ -25,7 +25,8 @@ import {
 import { getQuote } from "@/lib/feeds/markets";
 import { getCompanyNews } from "@/lib/feeds/news";
 import { findCompany, UNIVERSE, type Company } from "@/lib/data/universe";
-import { getIrHistory, type IrQuarter } from "@/lib/feeds/ir";
+import { getIrHistory } from "@/lib/feeds/ir";
+import type { IrQuarter } from "@/lib/feeds/ir-parse";
 import type { NewsItem, Quote } from "@/lib/core/types";
 
 export interface FinancialSeries {
@@ -245,7 +246,11 @@ export async function research(
         if (irQuarters.length > 0) sources.push(ir.provenance);
         else
           warnings.push(
-            `No quarterly fact sheet could be retrieved from ${ir.data.name} investor relations on this run.`,
+            `No quarterly fact sheet could be read from ${ir.data.name} investor relations. ` +
+              ir.data.attempts
+                .slice(0, 2)
+                .map((a) => `${a.label}: ${a.reason}`)
+                .join("; "),
           );
       }
     } catch (err) {

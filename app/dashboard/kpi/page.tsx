@@ -141,8 +141,6 @@ export default function KpiPage() {
       }));
   }, [peers]);
 
-  const ratio = (label: string) => fin?.ratios.ratios.find((r) => r.label === label);
-
   return (
     <div className="shell">
       <PageHeader
@@ -175,22 +173,22 @@ export default function KpiPage() {
                 sub={`USD · ${fin.company.name}`}
                 emphasis
               />
-              {["Operating margin", "Net margin", "Cash conversion", "Return on equity"].map((label) => {
-                const r = ratio(label);
-                return (
+              {(fin?.ratios.ratios ?? [])
+                .filter((r) => r.value !== null)
+                .slice(0, 4)
+                .map((r) => (
                   <StatBlock
-                    key={label}
-                    label={label}
-                    value={r?.value != null ? `${r.value.toFixed(1)}%` : <NotSet />}
-                    sub={r?.reading ?? "Not reported"}
+                    key={r.label}
+                    label={r.label}
+                    value={`${r.value!.toFixed(1)}${r.unit === "days" ? " days" : r.unit}`}
+                    sub={r.reading}
                   />
-                );
-              })}
+                ))}
             </StatRow>
 
             <Panel
               title="Quality measures"
-              hint="Each measure with a plain reading of what it indicates. Bands are sector conventions, not thresholds from a model."
+              hint="Each measure with a plain reading of what it indicates. Measures this filer does not report are omitted rather than shown empty. Bands are sector conventions, not thresholds from a model."
               actions={<Prov p={fin.provenance} />}
               flush
             >
@@ -204,7 +202,7 @@ export default function KpiPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {fin.ratios.ratios.map((r) => (
+                    {fin.ratios.ratios.filter((r) => r.value !== null).map((r) => (
                       <tr key={r.label}>
                         <th scope="row" className="tbl-rowhead">{r.label}</th>
                         <td className="num" style={{ fontWeight: 500 }}>

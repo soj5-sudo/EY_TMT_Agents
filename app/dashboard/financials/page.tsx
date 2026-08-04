@@ -27,6 +27,7 @@ interface QuarterRow {
 interface Payload {
   company: { name: string; cik: string; ticker: string; sector: string | null; subsector: string | null };
   latestFy: string | null;
+  latestFiled: string | null;
   quarters: QuarterRow[];
   years: Array<{ label: string; end: string; values: Record<string, number | null> }>;
   ratios: { period: string | null; ratios: Array<{ label: string; value: number | null; unit: string; reading: string }> };
@@ -84,25 +85,49 @@ export default function FinancialsPage() {
     load(symbol);
   }, [symbol, load]);
 
-  const quarters = data?.quarters ?? [];
+  const quarterly = (data?.quarters?.length ?? 0) > 0;
+  // 20-F filers tag no quarterly statements, so the annual series is the
+  // reported record. Same page, same table, different period length.
+  const quarters: QuarterRow[] = quarterly
+    ? data!.quarters
+    : (data?.years ?? []).map((y) => ({
+        label: y.label,
+        end: y.end,
+        derived: false,
+        values: y.values,
+      }));
   const latest = quarters.at(-1);
-  const yearAgo = quarters.length >= 5 ? quarters.at(-5) : undefined;
+  const yearAgo = quarterly
+    ? quarters.length >= 5
+      ? quarters.at(-5)
+      : undefined
+    : quarters.length >= 2
+      ? quarters.at(-2)
+      : undefined;
+  const periodWord = quarterly ? "quarter" : "year";
 
   const revenueChart = useMemo(
     () =>
       quarters
-        .filter((q) => q.values.revenue !== null)
-        .map((q) => ({
-          label: q.label.replace(" FY", " "),
-          bar: (q.values.revenue ?? 0) / 1e9,
-          line:
-            q.values.operatingIncome !== null && q.values.revenue
-              ? (q.values.operatingIncome / q.values.revenue) * 100
-              : 0,
-        }))
-        .filter((d) => d.line !== 0),
+        .filter((q) => q.values.revenue !== null && q.values.revenue !== 0)
+        .map((q) => {
+          const rev = q.values.revenue!;
+          const marginSource =
+            q.values.operatingIncome ?? q.values.netIncome ?? null;
+          return marginSource === null
+            ? null
+            : {
+                label: q.label.replace(" FY", " "),
+                bar: rev / 1e9,
+                line: (marginSource / rev) * 100,
+              };
+        })
+        .filter((d): d is { label: string; bar: number; line: number } => d !== null),
     [quarters],
   );
+  const marginLineLabel = quarters.some((q) => q.values.operatingIncome !== null)
+    ? "Operating margin"
+    : "Net margin";
 
   const bridge = useMemo(() => {
     if (!latest) return [];
@@ -170,7 +195,7 @@ export default function FinancialsPage() {
               <StatBlock
                 label={`Revenue, ${latest?.label ?? "latest"}`}
                 value={latest ? bn(latest.values.revenue) : <NotSet />}
-                sub={<>USD · <Delta value={growth("revenue")} /> year on year</>}
+                sub={<>USD · <Delta value={growth("revenue")} /> {quarterly ? "year on year" : "on the prior year"}</>}
                 emphasis
               />
               <StatBlock
@@ -211,10 +236,22 @@ export default function FinancialsPage() {
               <StatBlock
                 label="Fiscal year"
                 value={data.latestFy ?? <NotSet />}
-                sub={`${data.company.ticker} · CIK ${data.company.cik}`}
+                sub={
+                  data.latestFiled
+                    ? `${data.company.ticker} · last filing ${data.latestFiled}`
+                    : `${data.company.ticker} · CIK ${data.company.cik}`
+                }
               />
             </StatRow>
 
+            {!quarterly && (
+              <div className="notice">
+                {data.company.name} reports to the SEC on Form 20-F, which carries
+                annual statements only. The figures below are the tagged annual
+                record; quarterly detail for this company is published on its own
+                investor relations site rather than in the register.
+              </div>
+            )}
             {quarters.some((q) => q.derived) && (
               <div className="notice">
                 Quarters marked derived are computed as the full year less the three
@@ -233,16 +270,16 @@ export default function FinancialsPage() {
                 <ComboChart
                   data={revenueChart}
                   barLabel="Revenue, USD bn"
-                  lineLabel="Operating margin"
+                  lineLabel={marginLineLabel}
                   barFormat={(v) => `${v.toFixed(0)}bn`}
-                  caption={`Concept tags used: ${data.lines.revenue?.tags.join(", ") ?? "not set"}.`}
+                  caption={`Concept tags used: ${data.lines.revenue?.tags.join(", ") ?? "not set"}.${quarterly ? "" : " Annual periods: this filer reports to the SEC on Form 20-F and tags no quarterly statements."}`}
                 />
               ) : (
                 <div className="empty">
-                  <p className="empty-title">Not enough quarterly detail</p>
+                  <p className="empty-title">No plottable series</p>
                   <p className="empty-body">
-                    This filer does not tag quarterly revenue and operating income across
-                    enough periods to plot. The annual view below still applies.
+                    Fewer than two periods carry both revenue and an income line in
+                    this filer&apos;s tagging.
                   </p>
                 </div>
               )}
@@ -264,7 +301,7 @@ export default function FinancialsPage() {
             )}
 
             <Panel
-              title="Quarterly income statement"
+              title={quarterly ? "Quarterly income statement" : "Annual income statement"}
               hint="As filed. Blank cells mean the concept is not tagged by this filer for that period."
               actions={<Prov p={data.provenance} />}
               flush
@@ -272,7 +309,10 @@ export default function FinancialsPage() {
               <div className="tbl-scroll">
                 <table className="tbl">
                   <caption className="t-small" style={{ captionSide: "bottom", padding: 16, textAlign: "left" }}>
-                    Figures in US dollars, as reported. {data.company.name}, CIK {data.company.cik}.
+                    Figures in US dollars, as reported, one column per {periodWord}. A
+                    trailing d marks a value derived by arithmetic on filed figures.
+                    {" "}{data.company.name}, CIK {data.company.cik}
+                    {data.latestFiled ? `, last filing ${data.latestFiled}` : ""}.
                   </caption>
                   <thead>
                     <tr>
@@ -287,7 +327,13 @@ export default function FinancialsPage() {
                   </thead>
                   <tbody>
                     {PNL_ROWS.map((row) => {
-                      const present = quarters.some((q) => q.values[row.key] !== null);
+                      const present = quarters.some(
+                        (q) =>
+                          q.values[row.key] !== null ||
+                          (row.key === "grossProfit" &&
+                            q.values.revenue !== null &&
+                            q.values.costOfRevenue !== null),
+                      );
                       if (!present) return null;
                       return (
                         <tr key={row.key} data-total={row.subtotal ? "true" : undefined}>
@@ -301,11 +347,33 @@ export default function FinancialsPage() {
                           >
                             {row.label}
                           </th>
-                          {quarters.map((q) => (
-                            <td key={q.end} className="num">
-                              {q.values[row.key] === null ? <NotSet /> : bn(q.values[row.key])}
-                            </td>
-                          ))}
+                          {quarters.map((q) => {
+                            let v = q.values[row.key];
+                            let derivedCell = false;
+                            if (
+                              v === null &&
+                              row.key === "grossProfit" &&
+                              q.values.revenue !== null &&
+                              q.values.costOfRevenue !== null
+                            ) {
+                              v = q.values.revenue - q.values.costOfRevenue;
+                              derivedCell = true;
+                            }
+                            return (
+                              <td key={q.end} className="num">
+                                {v === null ? (
+                                  <NotSet />
+                                ) : (
+                                  <>
+                                    {bn(v)}
+                                    {derivedCell && (
+                                      <span style={{ color: "var(--text-muted)" }}> d</span>
+                                    )}
+                                  </>
+                                )}
+                              </td>
+                            );
+                          })}
                         </tr>
                       );
                     })}

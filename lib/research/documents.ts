@@ -13,9 +13,10 @@
 
 import { randomUUID } from "node:crypto";
 import { extractPdfText, PdfParseError } from "@/lib/pdf/extract";
+import { xlsxText, XlsxError } from "@/lib/research/xlsx";
 import type { IngestedDocument } from "@/lib/research/company";
 
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FILE_BYTES = 120 * 1024 * 1024;
 const MAX_DOCS_PER_SESSION = 12;
 const MAX_TOTAL_CHARS = 900_000;
 
@@ -76,6 +77,7 @@ export async function ingest(file: File): Promise<IngestedDocument> {
   let pages: number | null = null;
 
   const header = new TextDecoder("latin1").decode(bytes.subarray(0, 5));
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
 
   if (header === "%PDF-") {
     try {
@@ -89,11 +91,23 @@ export async function ingest(file: File): Promise<IngestedDocument> {
           : `${name} could not be parsed.`,
       );
     }
+  } else if (isZip && /\.(xlsx|xlsm)$/i.test(name)) {
+    try {
+      const parsed = xlsxText(bytes);
+      body = parsed.text;
+      pages = parsed.sheets;
+    } catch (err) {
+      throw new DocumentError(
+        err instanceof XlsxError
+          ? `${name} could not be read: ${err.message}`
+          : `${name} could not be parsed as a workbook.`,
+      );
+    }
   } else if (/\.(txt|csv|md|json)$/i.test(name)) {
     body = new TextDecoder("utf-8").decode(bytes);
   } else {
     throw new DocumentError(
-      `${name} is not a supported format. Upload PDF, CSV, TXT, MD or JSON.`,
+      `${name} is not a supported format. Upload PDF, XLSX, CSV, TXT, MD or JSON.`,
     );
   }
 

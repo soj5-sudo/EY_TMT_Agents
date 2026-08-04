@@ -77,6 +77,15 @@ export async function GET(request: Request) {
     const statements = await getStatements(sec.cik);
     const ratios = annualRatios(statements.data);
 
+    // The most recent filing date across every line, so the page can say when
+    // the record was last updated by the company itself.
+    let latestFiled: string | null = null;
+    for (const line of Object.values(statements.data.lines)) {
+      for (const pt of [...line.annual, ...line.quarterly]) {
+        if (pt.filed && (!latestFiled || pt.filed > latestFiled)) latestFiled = pt.filed;
+      }
+    }
+
     return NextResponse.json(
       {
         company: {
@@ -87,6 +96,7 @@ export async function GET(request: Request) {
           subsector: known?.subsector ?? null,
         },
         latestFy: statements.data.latestFy,
+        latestFiled,
         quarters: alignedQuarters(statements.data, PNL_KEYS, 8),
         years: alignedYears(statements.data, KPI_KEYS, 8),
         ratios,

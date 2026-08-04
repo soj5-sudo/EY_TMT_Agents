@@ -85,6 +85,12 @@ export default function ResearchPage() {
 
     try {
       const res = await fetch("/api/research/documents", { method: "POST", body: form });
+      if (res.status === 413) {
+        setUploadNote(
+          "That file is larger than the hosted deployment accepts, which caps uploads at about 4 MB. Run the console locally for files up to 120 MB.",
+        );
+        return;
+      }
       const json = await res.json();
       if (json.added?.length) addDocuments(json.added);
       const parts: string[] = [];
@@ -185,7 +191,7 @@ export default function ResearchPage() {
 
         <Panel
           title="Private records"
-          hint="Management accounts, data room exports, board packs. Parsed in the request that carries them and returned straight to your browser. The server keeps nothing and writes nothing to disk."
+          hint="Management accounts, data room exports, board packs, spreadsheets. Parsed in the request that carries them and returned straight to your browser. The server keeps nothing, and a refresh or tab close removes them permanently."
           actions={
             documents.length > 0 ? (
               <button type="button" className="btn btn-ghost" onClick={clearDocs}>
@@ -200,7 +206,7 @@ export default function ResearchPage() {
                 ref={fileRef}
                 type="file"
                 multiple
-                accept=".pdf,.csv,.txt,.md,.json"
+                accept=".pdf,.xlsx,.xlsm,.csv,.txt,.md,.json"
                 onChange={(e) => upload(e.target.files)}
                 style={{ display: "none" }}
                 id="docs"
@@ -215,7 +221,8 @@ export default function ResearchPage() {
                 {uploading ? "Reading" : "Attach documents"}
               </button>
               <span className="t-small" style={{ fontSize: 12 }}>
-                PDF, CSV, TXT, MD or JSON. Up to 20 MB each.
+                PDF, XLSX, CSV, TXT, MD or JSON. Up to 120 MB each locally; the
+                hosted deployment accepts about 4 MB per upload.
               </span>
             </div>
 
@@ -264,6 +271,18 @@ export default function ResearchPage() {
 
         {dossier && (
           <>
+            {!dossier.resolved.cik && !dossier.resolved.inUniverse && (
+              <div className="notice" data-kind="warning">
+                <strong style={{ fontWeight: 600 }}>
+                  No public record found for {dossier.query}.
+                </strong>{" "}
+                Verified coverage was checked{dossier.news.length > 0 ? ` and ${dossier.news.length} items surfaced` : " and nothing surfaced"}.
+                If this is a private company, attach its management accounts or a
+                spreadsheet above and run again: the agents read whatever the
+                documents carry and work from that. Attachments are parsed in your
+                browser session only and vanish on refresh.
+              </div>
+            )}
             {dossier.warnings.length > 0 && (
               <div className="notice" data-kind="warning">
                 {dossier.warnings.map((w, i) => (
@@ -378,6 +397,48 @@ export default function ResearchPage() {
                 </div>
               </Panel>
             )}
+
+            {dossier.documents.length > 0 &&
+              dossier.documents.some((d) => d.extracted.length > 0) && (
+                <Panel
+                  title="Figures read from your documents"
+                  hint="Each value is shown with the text around it, so it can be traced back to the line it came from."
+                  flush
+                >
+                  <div className="tbl-scroll">
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th scope="col">Document</th>
+                          <th scope="col">Measure</th>
+                          <th scope="col" className="num">Value</th>
+                          <th scope="col">Context</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dossier.documents.flatMap((doc) =>
+                          doc.extracted.slice(0, 14).map((f, i) => (
+                            <tr key={`${doc.id}-${i}`}>
+                              <td>
+                                <span className="t-small" style={{ fontSize: 12 }}>
+                                  {doc.name}
+                                </span>
+                              </td>
+                              <td style={{ fontWeight: 500 }}>{f.label}</td>
+                              <td className="num">{f.value}</td>
+                              <td style={{ maxWidth: 420 }}>
+                                <span className="t-small" style={{ fontSize: 12 }}>
+                                  {f.context}
+                                </span>
+                              </td>
+                            </tr>
+                          )),
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Panel>
+              )}
 
             {dossier.filings.length > 0 && (
               <Panel title="Filing history" hint="Material forms only. Ownership and insider filings are excluded." flush>

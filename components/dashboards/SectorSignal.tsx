@@ -53,6 +53,7 @@ export function SectorSignal() {
   const [newsError, setNewsError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(true);
   const [sectorFilter, setSectorFilter] = useState<string>("All");
+  const [openTheme, setOpenTheme] = useState<Theme | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -137,6 +138,17 @@ export function SectorSignal() {
   }, [companies]);
 
   const resolved = companies.filter((c) => c.quote).length;
+
+  const THEME_TOPIC: Partial<Record<Theme, string>> = {
+    "ai-compute": "ai-infra",
+    "ai-agents": "ai-agents",
+    "physical-ai": "physical-ai",
+    "ai-software": "ai-agents",
+    cloud: "ai-infra",
+    "digital-transformation": "services",
+    connectivity: "telecom",
+    streaming: "media",
+  };
 
   return (
     <div className="shell">
@@ -232,26 +244,79 @@ export function SectorSignal() {
         {themeMoves.length > 0 && (
           <Panel
             title="Theme exposure, today"
-            hint="Average day move across the names carrying each theme. A read on which part of the cycle is being paid for, not a portfolio return."
+            hint="Average day move across the names carrying each theme. Select a theme to see its constituents and the current coverage on it. A read on which part of the cycle is being paid for, not a portfolio return."
             actions={markets && <Prov p={markets.provenance} />}
           >
             <div className="theme-grid">
-              {themeMoves.map((t) => (
-                <div key={t.theme} className="theme-row">
-                  <span className="theme-name">{THEME_LABELS[t.theme]}</span>
-                  <span className="theme-count">{t.n} names</span>
-                  <span className="theme-bar" aria-hidden="true">
-                    <span
-                      className="theme-fill"
-                      data-up={t.avg >= 0}
-                      style={{ width: `${Math.min(50, Math.abs(t.avg) * 14)}%` }}
-                    />
-                  </span>
-                  <span className="theme-val tnum">
-                    <Delta value={t.avg} digits={2} />
-                  </span>
-                </div>
-              ))}
+              {themeMoves.map((t) => {
+                const open = openTheme === t.theme;
+                const members = companies
+                  .filter((c) => c.themes.includes(t.theme) && c.quote)
+                  .sort((a, b) => (b.quote!.changePct ?? 0) - (a.quote!.changePct ?? 0));
+                const topicId = THEME_TOPIC[t.theme];
+                const related = topicId
+                  ? (news?.items ?? []).filter((n) => n.topic === topicId).slice(0, 3)
+                  : [];
+                return (
+                  <div key={t.theme}>
+                    <button
+                      type="button"
+                      className="theme-row theme-row-btn"
+                      aria-expanded={open}
+                      onClick={() => setOpenTheme(open ? null : t.theme)}
+                    >
+                      <span className="theme-name">{THEME_LABELS[t.theme]}</span>
+                      <span className="theme-count">{t.n} names</span>
+                      <span className="theme-bar" aria-hidden="true">
+                        <span
+                          className="theme-fill"
+                          data-up={t.avg >= 0}
+                          style={{ width: `${Math.min(50, Math.abs(t.avg) * 14)}%` }}
+                        />
+                      </span>
+                      <span className="theme-val tnum">
+                        <Delta value={t.avg} digits={2} />
+                      </span>
+                    </button>
+                    {open && (
+                      <div className="theme-expand">
+                        <div className="theme-members">
+                          {members.map((c) => (
+                            <span key={c.symbol} className="theme-member">
+                              <span>{c.short}</span>
+                              <Delta value={c.quote!.changePct} digits={2} />
+                            </span>
+                          ))}
+                        </div>
+                        {related.length > 0 && (
+                          <div className="theme-news">
+                            <span className="t-label" style={{ fontSize: 10 }}>
+                              Coverage on this theme
+                            </span>
+                            {related.map((n) => (
+                              <a
+                                key={n.id}
+                                href={n.url}
+                                target="_blank"
+                                rel="noopener noreferrer nofollow"
+                                className="theme-news-item"
+                              >
+                                {n.title}
+                                <span className="t-small" style={{ fontSize: 11 }}>
+                                  {" "}· {n.publisher}
+                                  {n.publishedAt
+                                    ? `, ${new Date(n.publishedAt).toLocaleDateString("en-US", { day: "numeric", month: "short" })}`
+                                    : ""}
+                                </span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Panel>
         )}

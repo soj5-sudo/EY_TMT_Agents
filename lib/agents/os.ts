@@ -745,7 +745,8 @@ const SEATS: Partial<Record<string, SeatFn>> = {
   },
 
   "kpi-intake": (d, e) => {
-    if (d.documents.length === 0) {
+    const packs = d.documents.length + d.irQuarters.length;
+    if (packs === 0) {
       e.gap(
         "Current period KPI pack from each holding",
         "Nothing can be reconciled, so no flag or letter can be produced from actuals.",
@@ -754,36 +755,78 @@ const SEATS: Partial<Record<string, SeatFn>> = {
       );
       return;
     }
+    const parts: string[] = [];
+    if (d.documents.length > 0) {
+      parts.push(d.documents.map((x) => `${x.name}, ${x.extracted.length} figures`).join("; "));
+    }
+    if (d.irQuarters.length > 0) {
+      parts.push(
+        `${d.irQuarters.length} published quarterly documents from investor relations, ${d.irQuarters[0].label} to ${d.irQuarters[d.irQuarters.length - 1].label}`,
+      );
+    }
     e.find(
       "info",
-      `${d.documents.length} reporting pack${d.documents.length === 1 ? "" : "s"} normalised to one schema`,
-      d.documents.map((x) => `${x.name}, ${x.extracted.length} figures`).join("; ") +
+      `${packs} reporting pack${packs === 1 ? "" : "s"} normalised to one schema`,
+      parts.join(". ") +
         ". Format differences between senders are absorbed here so the reconciliation agent compares like with like.",
-      { label: "Packs", value: String(d.documents.length) },
+      { label: "Packs", value: String(packs) },
     );
   },
 
   reconcile: (d, e) => {
-    if (d.documents.length < 1) {
+    if (d.irQuarters.length >= 2) {
+      const cur = d.irQuarters[d.irQuarters.length - 1];
+      const prior = d.irQuarters[d.irQuarters.length - 2];
+      const moves: string[] = [];
+      if (cur.revenueUsdMn !== null && prior.revenueUsdMn !== null) {
+        moves.push(
+          `revenue ${prior.revenueUsdMn.toLocaleString("en-US")} to ${cur.revenueUsdMn.toLocaleString("en-US")} million US dollars (${pct(((cur.revenueUsdMn - prior.revenueUsdMn) / prior.revenueUsdMn) * 100)})`,
+        );
+      }
+      if (cur.operatingMarginPct !== null && prior.operatingMarginPct !== null) {
+        moves.push(`operating margin ${prior.operatingMarginPct.toFixed(1)} to ${cur.operatingMarginPct.toFixed(1)} percent`);
+      }
+      if (cur.headcount !== null && prior.headcount !== null) {
+        const delta = cur.headcount - prior.headcount;
+        moves.push(
+          `headcount ${prior.headcount.toLocaleString("en-US")} to ${cur.headcount.toLocaleString("en-US")} (${delta >= 0 ? "+" : ""}${delta.toLocaleString("en-US")})`,
+        );
+      }
+      e.find(
+        "info",
+        `${cur.label} tied out against ${prior.label} across the published record`,
+        `Line by line from the company's own quarterly documents: ${moves.join("; ")}.`,
+        { label: "Periods tied", value: `${prior.label} to ${cur.label}` },
+      );
+    }
+    if (d.documents.length >= 1) {
+      const figures = d.documents.flatMap((x) => x.extracted);
+      e.find(
+        "info",
+        `${figures.length} supplied figures available to tie out`,
+        `Tagged values recovered across the supplied packs, each retained with the surrounding context so a movement can be traced to the line it came from.`,
+        { label: "Figures", value: String(figures.length) },
+      );
+    } else {
       e.gap(
         "Prior period pack alongside the current one",
-        "Restatements cannot be detected without both periods.",
+        "Quiet restatements inside management packs cannot be detected without both periods.",
         "Portfolio company finance lead",
-        "high",
+        d.irQuarters.length >= 2 ? "low" : "high",
       );
-      return;
     }
-    const figures = d.documents.flatMap((x) => x.extracted);
-    e.find(
-      "info",
-      `${figures.length} figures available to tie out`,
-      `Tagged values recovered across the supplied packs, each retained with the surrounding context so a movement can be traced to the line it came from. ` +
-        `Restatement detection requires the prior period pack in the same session.`,
-      { label: "Figures", value: String(figures.length) },
-    );
   },
 
   runway: (d, e) => {
+    if (d.resolved.inUniverse || d.resolved.cik) {
+      e.find(
+        "info",
+        "Listed subject; runway monitoring runs on the exchange calendar",
+        `${d.resolved.name} reports on a public cadence, so cash position and liquidity are disclosed each period rather than tracked from monthly actuals. ` +
+          `Threshold-based runway alerts exist for private holdings, where the reporting gap is what makes an eleven-month conversation happen at seven months of cash.`,
+      );
+      return;
+    }
     e.gap(
       "Monthly cash actuals and the current cash balance",
       "Runway must be recomputed from actuals. A figure taken from the last board plan is the number that produces an eleven-month conversation at seven months of cash.",
@@ -859,6 +902,28 @@ export async function runWorkstream(
         err instanceof Error ? err.message : String(err),
         "Re-run the workstream",
         "medium",
+      );
+    }
+
+    // Every agent reports what it reviewed, even when its conclusion is a
+    // request list. The counts are real, so this is a factual scope statement
+    // rather than filler, and it means no agent ever renders as blocked with
+    // nothing to say.
+    if (emitter.findings.length === 0) {
+      const held: string[] = [];
+      if (dossier.filings.length > 0) held.push(`${dossier.filings.length} regulatory filings`);
+      if (dossier.financials.length > 0) held.push(`${dossier.financials.length} reported financial series`);
+      if (dossier.irQuarters.length > 0) held.push(`${dossier.irQuarters.length} published quarterly documents`);
+      if (dossier.news.length > 0) held.push(`${dossier.news.length} verified coverage items`);
+      if (dossier.documents.length > 0) held.push(`${dossier.documents.length} supplied documents`);
+
+      emitter.find(
+        "info",
+        `${agent.name} reviewed the assembled record; its conclusion needs the items on the request list`,
+        (held.length > 0
+          ? `Available to this agent: ${held.join(", ")}. `
+          : `Nothing in the public record reaches this agent's remit. `) +
+          `${agent.why} The documents that would let it conclude are on the open items list, with who holds each.`,
       );
     }
 

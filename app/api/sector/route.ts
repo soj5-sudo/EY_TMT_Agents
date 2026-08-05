@@ -2,10 +2,8 @@ import { NextResponse } from "next/server";
 import { annualRatios, getStatements } from "@/lib/financials/model";
 import { resolveCik } from "@/lib/feeds/sec";
 import { getIrHistory } from "@/lib/feeds/ir";
-import { scrapeIr } from "@/lib/research/ir-scrape";
-import { buildLedgerFromIr } from "@/lib/research/ir-facts";
 import type { FactKey } from "@/lib/research/facts";
-import { getFxTable } from "@/lib/feeds/fx";
+import { ledgerFor } from "@/lib/brain/ledger";
 import { UNIVERSE, THEME_LABELS, type Theme } from "@/lib/data/universe";
 import { cached } from "@/lib/core/cache";
 
@@ -107,56 +105,58 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
     };
   }
 
-  // Outside the SEC register: the company's own published results files,
-  // crawled, downloaded, read and converted to US dollars at a live fixing.
-  const scraped = await scrapeIr(c.symbol, 3).catch(() => null);
-  if (scraped && scraped.metrics.length > 0) {
-    const fx = await getFxTable().catch(() => null);
-    const bridged = buildLedgerFromIr(scraped, fx, c.currency);
-    const rev = bridged?.ledger.series.revenue;
-    if (bridged && rev) {
-      const annual = rev.annual;
-      const quarterly = rev.quarterly;
-      // A quarter is annualised so the column compares with annual filers.
-      const revenue =
-        annual.at(-1)?.value ?? (quarterly.at(-1) ? quarterly.at(-1)!.value * 4 : null);
+  // Outside the SEC register: the company's own published results files. The
+  // same path the rest of the console uses, so this panel gets the live scrape
+  // when the publisher allows it and the dated harvest when it does not,
+  // rather than showing an empty row for a company that publishes everything.
+  const built = await ledgerFor(c).catch(() => null);
+  const ledger = built?.ledger ?? null;
+  const revenueLine = ledger?.series.revenue;
 
-      // Margins are taken on the same basis as the revenue they divide, so a
-      // quarterly numerator never lands on an annual denominator.
-      const denominator = annual.at(-1)?.value ?? quarterly.at(-1)?.value ?? null;
-      const useAnnual = annual.length > 0;
-      const pctOf = (k: FactKey): number | null => {
-        const line = bridged.ledger.series[k];
-        if (!line || denominator === null || denominator === 0) return null;
-        const v = useAnnual ? line.annual.at(-1)?.value : line.quarterly.at(-1)?.value;
-        if (v === undefined || v === null) return null;
-        return (v / denominator) * 100;
-      };
+  if (ledger && revenueLine) {
+    const annual = revenueLine.annual;
+    const quarterly = revenueLine.quarterly;
+    const useAnnual = annual.length > 0;
 
-      const basis = annual.length >= 2 ? annual : quarterly;
-      let growth: number | null = null;
-      if (basis.length >= 2) {
-        const first = basis[0].value;
-        const yearsPer = basis === annual ? 1 : 0.25;
-        const years = (basis.length - 1) * yearsPer;
-        if (first > 0 && years > 0) {
-          growth = (Math.pow(basis[basis.length - 1].value / first, 1 / years) - 1) * 100;
-        }
+    // A quarter is annualised so the column compares with annual filers.
+    const revenue = useAnnual
+      ? (annual.at(-1)?.value ?? null)
+      : quarterly.at(-1)
+        ? quarterly.at(-1)!.value * 4
+        : null;
+
+    const denominator = (useAnnual ? annual.at(-1)?.value : quarterly.at(-1)?.value) ?? null;
+    const pctOf = (k: FactKey): number | null => {
+      const line = ledger.series[k];
+      if (!line || denominator === null || denominator === 0) return null;
+      const v = useAnnual ? line.annual.at(-1)?.value : line.quarterly.at(-1)?.value;
+      if (v === undefined || v === null) return null;
+      return (v / denominator) * 100;
+    };
+
+    const basis = useAnnual && annual.length >= 2 ? annual : quarterly;
+    let growth: number | null = null;
+    if (basis.length >= 2) {
+      const first = basis[0].value;
+      const yearsPer = basis === annual ? 1 : 0.25;
+      const years = (basis.length - 1) * yearsPer;
+      if (first > 0 && years > 0) {
+        growth = (Math.pow(basis[basis.length - 1].value / first, 1 / years) - 1) * 100;
       }
-
-      return {
-        ...base,
-        period: (annual.at(-1) ?? quarterly.at(-1))?.label ?? null,
-        revenue,
-        operatingMargin: pctOf("operatingIncome"),
-        netMargin: pctOf("netIncome"),
-        grossMargin: pctOf("grossProfit"),
-        rndIntensity: pctOf("rnd"),
-        revenueGrowthPct: growth,
-        lastFiled: scraped.provenance.retrievedAt.slice(0, 10),
-        source: "ir",
-      };
     }
+
+    return {
+      ...base,
+      period: (useAnnual ? annual.at(-1) : quarterly.at(-1))?.label ?? null,
+      revenue,
+      operatingMargin: pctOf("operatingIncome"),
+      netMargin: pctOf("netIncome"),
+      grossMargin: pctOf("grossProfit"),
+      rndIntensity: pctOf("rnd"),
+      revenueGrowthPct: growth,
+      lastFiled: (built?.provenance?.sourceDatedAt ?? built?.provenance?.retrievedAt ?? "").slice(0, 10) || null,
+      source: "ir",
+    };
   }
 
   const ir = await getIrHistory(c.symbol, 8).catch(() => null);

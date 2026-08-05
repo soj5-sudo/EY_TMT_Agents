@@ -1,13 +1,17 @@
-name: Deploy to Vercel
+name: Verify and refresh
 
 on:
   push:
     branches: [main]
+  schedule:
+    # Monday morning, after the Indian and European quarterly cycles have
+    # published. The harvest is cheap and the documents change slowly.
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 concurrency:
-  group: production-deploy
-  cancel-in-progress: true
+  group: main
+  cancel-in-progress: false
 
 jobs:
   verify:
@@ -24,33 +28,46 @@ jobs:
       - name: Build
         run: npm run build
 
-  deploy:
-    needs: verify
+      # Publishing is handled by Vercel's own Git integration, which is
+      # connected to this repository and builds every push to main. There is no
+      # token here and none is needed: a push is the deploy.
+      - name: Deployment
+        run: echo "::notice title=Deploy::Vercel builds this commit from its Git connection. No credential is stored in this workflow."
+
+  refresh-published-documents:
+    # Only on the schedule or when asked. A push does not need to re-scrape.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
+      - run: npm ci
 
-      # The CLI writes a short-lived OAuth session to disk, which expires and
-      # cannot serve as a CI credential. A deploy therefore needs an API token
-      # minted at vercel.com/account/tokens and stored as VERCEL_TOKEN. Until
-      # one exists this step reports the fact and passes, so the workflow
-      # reflects the state of the build rather than failing on a missing secret.
-      - name: Check deploy credential
-        id: cred
+      # Several investor relations hosts refuse requests from hosting networks
+      # while serving the identical URL to an ordinary one. This job re-reads
+      # the published spreadsheets and results releases and commits the result,
+      # which is what the deployment falls back to when it is refused. If the
+      # runner is refused too, the step reports it and leaves the existing
+      # harvest in place rather than replacing it with nothing.
+      - name: Harvest published results files
+        run: npm run harvest:ir
+
+      - name: Commit if the published figures moved
         run: |
-          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Deploy skipped::VERCEL_TOKEN is not set. Create an API token at vercel.com/account/tokens, then run: gh secret set VERCEL_TOKEN --repo soj5-sudo/EY_TMT_Agents"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- lib/data/ir-ledger-snapshot.ts; then
+            echo "::notice title=Harvest::No change in the published figures."
+            exit 0
           fi
+          git add lib/data/ir-ledger-snapshot.ts
+          git commit -m "Refresh the harvested results files
 
-      - name: Deploy
-        if: steps.cred.outputs.present == 'true'
-        run: npx vercel@latest deploy --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"
+          Automated re-read of the investor relations documents. Vercel
+          publishes this commit from its Git connection."
+          git push

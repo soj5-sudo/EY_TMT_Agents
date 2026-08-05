@@ -12,6 +12,7 @@
  */
 
 import { UNIVERSE, type Company } from "@/lib/data/universe";
+import { CONFIDENCE_FLOOR, classifyIntent } from "@/lib/brain/classifier";
 
 export type Intent =
   | "metric"      // what is X's operating margin
@@ -181,5 +182,53 @@ export function parseQuestion(raw: string): ParsedQuestion {
   else if (EXPLAIN_RE.test(raw)) intent = "explain";
   else if (metrics.length > 0 || companies.length > 0) intent = "metric";
 
+  // The trained router decides where it is confident, and hands back to the
+  // rules where it is not. On held out phrasings the combination scores higher
+  // than either alone: the rules remain better on plain measure lookups, the
+  // model is far better on everything else.
+  const prediction = classifyIntent(placeholderForm(q, companies, metrics), {
+    companies: companies.length,
+    metrics: metrics.length,
+  });
+
+  if (prediction && prediction.confidence >= CONFIDENCE_FLOOR) {
+    intent = prediction.intent as Intent;
+  }
+
   return { raw, intent, companies, metrics, subsector, superlative };
+}
+
+/**
+ * Rewrites the question with company and measure mentions replaced.
+ *
+ * The classifier is trained on this form. Leaving the names in would let it
+ * key on the companies that happened to appear in the training corpus, and it
+ * would then misroute every question about a name it had not seen.
+ */
+function placeholderForm(q: string, companies: Company[], metrics: MetricDef[]): string {
+  let out = q;
+
+  for (const m of metrics) {
+    for (const term of [...m.terms].sort((a, b) => b.length - a.length)) {
+      out = out.split(term).join(" <metric> ");
+    }
+  }
+
+  for (const c of companies) {
+    const names = [
+      c.short.toLowerCase(),
+      c.name.toLowerCase(),
+      c.symbol.split(".")[0].toLowerCase(),
+    ].sort((a, b) => b.length - a.length);
+    for (const n of names) {
+      if (n.length < 3) continue;
+      out = out.split(n).join(" <co> ");
+    }
+  }
+
+  for (const s of new Set(UNIVERSE.map((c) => c.subsector.toLowerCase()))) {
+    out = out.split(s).join(" <sub> ");
+  }
+
+  return out.replace(/\b\d+\b/g, " <num> ").replace(/\s+/g, " ").trim();
 }

@@ -123,6 +123,11 @@ export class Bm25Index {
     return this.docs.length;
   }
 
+  /** Documents in a given section, in corpus order. */
+  bySection(section: string): RagDoc[] {
+    return this.docs.filter((d) => d.doc.section === section).map((d) => d.doc);
+  }
+
   search(query: string, limit = 8): ScoredDoc[] {
     if (this.docs.length === 0) return [];
     if (this.avgLength === 0) this.finalise();

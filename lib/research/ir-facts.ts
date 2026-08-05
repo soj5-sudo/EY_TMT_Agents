@@ -138,7 +138,7 @@ const LABEL_MAP: Array<[FactKey, RegExp[]]> = [
     /^net income attributable/i,
   ]],
   ["grossProfit", [/^gross profit$/i]],
-  ["costOfRevenue", [/^cost of (revenue|sales|services)$/i, /^total (cost of|operating) expenses?$/i]],
+  ["costOfRevenue", [/^cost of (revenue|sales|services)$/i, /^total cost of (revenue|sales|services)$/i]],
   ["depreciation", [/^depreciation( (and|&) amorti[sz]ation)?$/i, /^d ?& ?a$/i]],
   ["taxExpense", [/^(income )?tax expense$/i, /^income tax$/i, /^provision for tax(ation)?$/i, /^total tax$/i]],
   ["pretaxIncome", [/^profit before tax(es)?$/i, /^pbt$/i, /^income before (income )?tax(es)?$/i]],
@@ -202,6 +202,17 @@ const CONCEPT_LABEL: Partial<Record<FactKey, string>> = {
   epsDiluted: "Diluted earnings per share",
   employees: "Employees",
 };
+
+/**
+ * Concepts that are a position at a moment rather than an amount accumulated
+ * over a period. Balance sheet lines and headcount; everything else is a flow.
+ */
+const STOCK_KEYS = new Set<FactKey>([
+  "cash", "receivables", "unbilled", "payables", "inventory", "deferredRevenue",
+  "assets", "currentAssets", "currentLiabilities", "equity", "debt", "debtCurrent",
+  "goodwill", "intangibles", "ppe", "leaseLiability", "minorityInterest",
+  "orderBook", "employees", "unrecognisedTax", "lossContingency", "purchaseCommitments",
+]);
 
 /**
  * Rows whose values are already ratios and must not be scaled or converted.
@@ -278,7 +289,7 @@ export function buildLedgerFromIr(
     const scale = metric.unit?.scale ?? 1;
 
     // Without a currency the figure cannot be placed on a dollar ledger at all.
-    if (!currency) {
+    if (!currency && key !== "employees") {
       dropped++;
       continue;
     }
@@ -290,11 +301,11 @@ export function buildLedgerFromIr(
     // billion, and nothing downstream can detect an error of that shape.
     // Ratios are unaffected because the scale cancels, so they are left to the
     // agents that compute them from two rows on the same basis.
-    if (metric.unit && !metric.unit.scaleStated) {
+    if (metric.unit && !metric.unit.scaleStated && key !== "employees") {
       dropped++;
       continue;
     }
-    if (!metric.unit) {
+    if (!metric.unit && key !== "employees") {
       dropped++;
       continue;
     }
@@ -303,14 +314,20 @@ export function buildLedgerFromIr(
     // release laid out as prose there is no table structure, so a caption seen
     // earlier in the document may belong to something else entirely, and the
     // row is only trusted when its own label carries the units.
-    if (metric.structured === false && !metric.unitFromLabel) {
+    if (metric.structured === false && !metric.unitFromLabel && key !== "employees") {
       dropped++;
       continue;
     }
 
-    let factor = scale;
-    if (currency !== "USD") {
-      const r = fx?.rateFor(currency) ?? null;
+    // Headcount is a count of people. Scaling it by the sheet's money units and
+    // dividing it by an exchange rate turns thirteen thousand employees into
+    // one point three billion, which is obviously wrong on sight and would not
+    // be obvious at all inside a ratio.
+    const isCount = key === "employees";
+
+    let factor = isCount ? 1 : scale;
+    if (currency !== "USD" && !isCount) {
+      const r = currency ? (fx?.rateFor(currency) ?? null) : null;
       if (r === null || r === 0) {
         dropped++;
         continue;
@@ -342,8 +359,12 @@ export function buildLedgerFromIr(
     const annualPts = points.filter((x) => x.p.quarter === null).map(toValue);
     const quarterlyPts = points.filter((x) => x.p.quarter !== null).map(toValue);
 
-    // Where only quarters are published, the trailing four are summed into a
+    // Where only quarters are published, the trailing four are combined into a
     // year so the annual reads every agent makes have something to stand on.
+    // How they combine depends on what the concept is: a flow accumulates over
+    // the year, a stock is a position at a moment and the year end value is
+    // simply the last one. Summing a headcount across four quarters reports an
+    // organisation four times its actual size, and the figure looks ordinary.
     let annual = annualPts;
     if (annual.length === 0 && quarterlyPts.length >= 4) {
       const grouped = new Map<number, FactValue[]>();
@@ -351,16 +372,24 @@ export function buildLedgerFromIr(
         const y = Number(q.label.slice(-4));
         grouped.set(y, [...(grouped.get(y) ?? []), q]);
       }
+      const isStock = STOCK_KEYS.has(key);
       annual = [...grouped.entries()]
         .filter(([, qs]) => qs.length === 4)
-        .map(([y, qs]) => ({
-          start: null,
-          end: `${y}-12-31`,
-          value: qs.reduce((s, x) => s + x.value, 0),
-          form: "Published results file, four quarters summed",
-          filed: scrape.provenance.retrievedAt.slice(0, 10),
-          label: `FY${y}`,
-        }))
+        .map(([y, qs]) => {
+          const ordered = [...qs].sort((a, b) => a.end.localeCompare(b.end));
+          return {
+            start: null,
+            end: `${y}-12-31`,
+            value: isStock
+              ? ordered[ordered.length - 1].value
+              : ordered.reduce((sum, x) => sum + x.value, 0),
+            form: isStock
+              ? "Published results file, position at the year end"
+              : "Published results file, four quarters summed",
+            filed: scrape.provenance.retrievedAt.slice(0, 10),
+            label: `FY${y}`,
+          };
+        })
         .sort((a, b) => a.end.localeCompare(b.end));
     }
 
@@ -373,7 +402,7 @@ export function buildLedgerFromIr(
       key,
       label: CONCEPT_LABEL[key] ?? key,
       tag: `${metric.label}, published results file`,
-      unit: "USD",
+      unit: key === "employees" ? "count" : "USD",
       annual,
       quarterly: quarterlyPts.slice(-16),
       latest: annual.at(-1)?.value ?? quarterlyPts.at(-1)?.value ?? null,

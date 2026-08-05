@@ -487,7 +487,11 @@ function buildSeries(
   // series. An instant fact (no start) belongs to the balance sheet and is
   // treated as annual when it lands on an annual form.
   const annual = all.filter((p) => {
-    if (p.start === null) return ANNUAL_FORM.test(p.form);
+    // A balance sheet concept is an instant. Requiring it to arrive on an
+    // annual form drops the years where the filer tagged the same balance only
+    // in a quarterly report, and the series then ends silently two years
+    // early while every ratio built on it keeps returning a plausible number.
+    if (p.start === null) return true;
     const d = days(p.start, p.end);
     return d > 300 && d < 400 && ANNUAL_FORM.test(p.form);
   });

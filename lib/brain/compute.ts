@@ -14,6 +14,7 @@
 import { annualRatios, getStatements } from "@/lib/financials/model";
 import { resolveCik } from "@/lib/feeds/sec";
 import { getIrHistory } from "@/lib/feeds/ir";
+import { ledgerFor, seriesFor } from "@/lib/brain/ledger";
 import type { Company } from "@/lib/data/universe";
 import type { Provenance } from "@/lib/core/types";
 import type { MetricDef, MetricKey } from "@/lib/brain/intent";
@@ -157,12 +158,34 @@ async function computeFromIr(
   metric: MetricDef,
   base: MetricValue,
 ): Promise<MetricValue> {
+  // The scraped results files carry far more than the fact sheets do, so the
+  // ledger is tried first and the fact sheet is the fallback. Without this a
+  // company outside the register could be asked only five of the thirteen
+  // measures the console knows, purely because of where it is listed.
+  const fromLedger = await ledgerFor(company).catch(() => null);
+  if (fromLedger?.ledger) {
+    const series = seriesFor(fromLedger.ledger, metric.key);
+    const last = series.at(-1);
+    if (last) {
+      return {
+        ...base,
+        value: last.value,
+        period: last.label,
+        provenance: fromLedger.provenance,
+      };
+    }
+  }
+
   const ir = await getIrHistory(company.symbol, 8).catch(() => null);
   const quarters = ir?.data.quarters ?? [];
   if (quarters.length === 0) {
     return {
       ...base,
-      unavailable: `No published quarterly document could be read for ${company.short}.`,
+      provenance: fromLedger?.provenance ?? null,
+      unavailable:
+        fromLedger?.ledger
+          ? `${company.short} publishes results files, but none of them states ${metric.label.toLowerCase()}.`
+          : `No published results file could be read for ${company.short}.`,
     };
   }
 
@@ -222,6 +245,85 @@ async function computeFromIr(
  * Trend
  * ---------------------------------------------------------------- */
 
+
+/**
+ * One measure for one reported year.
+ *
+ * The same arithmetic as annualRatios, applied to any year rather than only
+ * the latest, so a trend can be drawn for every measure the console can state
+ * a level for. Keeping it in one place is what stops the two diverging, which
+ * would produce a chart whose last point disagrees with the headline figure
+ * printed above it.
+ */
+function metricAtYear(
+  key: MetricKey,
+  at: (line: string, end: string) => number | null,
+  end: string,
+  revenue: number,
+  priorRevenue: number | null,
+): number | null {
+  // A denominator near zero yields a correct division that means nothing.
+  const usable = (d: number | null) =>
+    d !== null && Number.isFinite(d) && d !== 0 && Math.abs(d) >= Math.abs(revenue) * 0.02;
+
+  const over = (numerator: number | null, denominator: number | null, scale: number) =>
+    numerator !== null && usable(denominator) ? (numerator / denominator!) * scale : null;
+
+  switch (key) {
+    case "revenue":
+      return revenue;
+
+    case "revenueGrowth":
+      return priorRevenue !== null && priorRevenue > 0
+        ? ((revenue - priorRevenue) / priorRevenue) * 100
+        : null;
+
+    case "grossMargin": {
+      const cost = at("costOfRevenue", end);
+      const gross = at("grossProfit", end) ?? (cost !== null ? revenue - cost : null);
+      return over(gross, revenue, 100);
+    }
+
+    case "operatingMargin":
+      return over(at("operatingIncome", end), revenue, 100);
+
+    case "netMargin":
+      return over(at("netIncome", end), revenue, 100);
+
+    case "rndIntensity":
+      return over(at("rnd", end), revenue, 100);
+
+    case "shareBasedComp":
+      return over(at("shareBasedComp", end), revenue, 100);
+
+    case "cashConversion":
+      return over(at("operatingCashFlow", end), at("netIncome", end), 100);
+
+    case "freeCashMargin": {
+      const ocf = at("operatingCashFlow", end);
+      const capex = at("capex", end);
+      if (ocf === null) return null;
+      return over(ocf - Math.abs(capex ?? 0), revenue, 100);
+    }
+
+    case "receivableDays":
+      return over(at("receivables", end), revenue, 365);
+
+    case "returnOnEquity":
+      return over(at("netIncome", end), at("equity", end), 100);
+
+    // Headcount and attrition are not tagged concepts on the domestic forms.
+    // They are published by companies that report outside the register, and
+    // the branch above reads them from there.
+    case "headcount":
+    case "attrition":
+      return null;
+
+    default:
+      return null;
+  }
+}
+
 export async function computeTrend(
   company: Company,
   metric: MetricDef,
@@ -237,10 +339,33 @@ export async function computeTrend(
   };
 
   if (!company.secFiler) {
+    const fromLedger = await ledgerFor(company).catch(() => null);
+    if (fromLedger?.ledger) {
+      const series = seriesFor(fromLedger.ledger, metric.key);
+      if (series.length >= 2) {
+        const span = series.length - 1;
+        const cagr =
+          metric.unit === "USD" && series[0].value > 0
+            ? (Math.pow(series.at(-1)!.value / series[0].value, 1 / span) - 1) * 100
+            : null;
+        return {
+          ...base,
+          points: series,
+          cagrPct: cagr,
+          spanYears: span,
+          provenance: fromLedger.provenance,
+        };
+      }
+    }
+
     const ir = await getIrHistory(company.symbol, 8).catch(() => null);
     const quarters = ir?.data.quarters ?? [];
     if (quarters.length === 0) {
-      return { ...base, unavailable: `No published documents could be read for ${company.short}.` };
+      return {
+        ...base,
+        provenance: fromLedger?.provenance ?? null,
+        unavailable: `No published documents could be read for ${company.short}.`,
+      };
     }
     const pick = (q: (typeof quarters)[number]): number | null =>
       metric.key === "revenue"
@@ -283,22 +408,10 @@ export async function computeTrend(
     statements.data.lines[key]?.annual.find((p) => p.end === end)?.value ?? null;
 
   const points: TrendPoint[] = [];
-  for (const y of rev) {
-    let v: number | null = null;
-    if (metric.key === "revenue") v = y.value;
-    else if (metric.key === "operatingMargin") {
-      const op = at("operatingIncome", y.end);
-      v = op !== null && y.value > 0 ? (op / y.value) * 100 : null;
-    } else if (metric.key === "netMargin") {
-      const ni = at("netIncome", y.end);
-      v = ni !== null && y.value > 0 ? (ni / y.value) * 100 : null;
-    } else if (metric.key === "rndIntensity") {
-      const rd = at("rnd", y.end);
-      v = rd !== null && y.value > 0 ? (rd / y.value) * 100 : null;
-    } else if (metric.key === "grossMargin") {
-      const gp = at("grossProfit", y.end) ?? (at("costOfRevenue", y.end) !== null ? y.value - at("costOfRevenue", y.end)! : null);
-      v = gp !== null && y.value > 0 ? (gp / y.value) * 100 : null;
-    }
+  for (let i = 0; i < rev.length; i++) {
+    const y = rev[i];
+    const prior = i > 0 ? rev[i - 1] : null;
+    const v = metricAtYear(metric.key, at, y.end, y.value, prior?.value ?? null);
     if (v !== null) points.push({ label: y.label, value: v });
   }
 

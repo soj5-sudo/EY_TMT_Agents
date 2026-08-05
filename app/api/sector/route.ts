@@ -42,6 +42,8 @@ export interface SectorRow {
   revenueGrowthPct: number | null;
   lastFiled: string | null;
   source: "sec" | "ir" | null;
+  /** Why this name carries no figures, when it carries none. */
+  coverageNote?: string;
 }
 
 function pick(ratios: Array<{ label: string; value: number | null }>, label: string) {
@@ -67,6 +69,7 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
     revenueGrowthPct: null,
     lastFiled: null,
     source: null,
+    coverageNote: c.coverageNote,
   };
 
   if (c.secFiler) {
@@ -281,7 +284,15 @@ export async function GET() {
       rows,
       subsectors,
       themes,
-      coverage: { total: rows.length, withData: withData.length },
+      coverage: {
+        total: rows.length,
+        withData: withData.length,
+        // Names with no reported figures, each with the reason. A gap that is
+        // explained is information; one that is not reads as a defect.
+        notCovered: rows
+          .filter((r) => r.revenue === null)
+          .map((r) => ({ short: r.short, reason: r.coverageNote ?? "No published source is wired for this name." })),
+      },
       provenance: {
         kind: "filing",
         source: "SEC EDGAR XBRL company facts and published investor relations documents",

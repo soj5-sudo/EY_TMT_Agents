@@ -3,13 +3,29 @@ name: Deploy to Vercel
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: production-deploy
   cancel-in-progress: true
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
+
   deploy:
+    needs: verify
     runs-on: ubuntu-latest
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
@@ -19,5 +35,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      # The CLI writes a short-lived OAuth session to disk, which expires and
+      # cannot serve as a CI credential. A deploy therefore needs an API token
+      # minted at vercel.com/account/tokens and stored as VERCEL_TOKEN. Until
+      # one exists this step reports the fact and passes, so the workflow
+      # reflects the state of the build rather than failing on a missing secret.
+      - name: Check deploy credential
+        id: cred
+        run: |
+          if [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Deploy skipped::VERCEL_TOKEN is not set. Create an API token at vercel.com/account/tokens, then run: gh secret set VERCEL_TOKEN --repo soj5-sudo/EY_TMT_Agents"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Deploy
-        run: npx vercel@latest deploy --prod --yes --token ${{ secrets.VERCEL_TOKEN }}
+        if: steps.cred.outputs.present == 'true'
+        run: npx vercel@latest deploy --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"

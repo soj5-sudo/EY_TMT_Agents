@@ -384,12 +384,12 @@ export function SectorSignal() {
                         <td className="num">
                           {r.revenueGrowthPct !== null ? <Delta value={r.revenueGrowthPct} /> : <NotSet />}
                         </td>
-                        <td className="num">{r.grossMargin !== null ? `${r.grossMargin.toFixed(1)}%` : "—"}</td>
-                        <td className="num">{r.operatingMargin !== null ? `${r.operatingMargin.toFixed(1)}%` : "—"}</td>
-                        <td className="num">{r.netMargin !== null ? `${r.netMargin.toFixed(1)}%` : "—"}</td>
-                        <td className="num">{r.rndIntensity !== null ? `${r.rndIntensity.toFixed(1)}%` : "—"}</td>
+                        <td className="num">{r.grossMargin !== null ? `${r.grossMargin.toFixed(1)}%` : "n/a"}</td>
+                        <td className="num">{r.operatingMargin !== null ? `${r.operatingMargin.toFixed(1)}%` : "n/a"}</td>
+                        <td className="num">{r.netMargin !== null ? `${r.netMargin.toFixed(1)}%` : "n/a"}</td>
+                        <td className="num">{r.rndIntensity !== null ? `${r.rndIntensity.toFixed(1)}%` : "n/a"}</td>
                         <td className="num">
-                          <span className="t-small" style={{ fontSize: 11 }}>{r.period ?? "—"}</span>
+                          <span className="t-small" style={{ fontSize: 11 }}>{r.period ?? "n/a"}</span>
                         </td>
                       </tr>
                     ))}

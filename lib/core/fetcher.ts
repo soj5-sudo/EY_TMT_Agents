@@ -29,6 +29,28 @@ const ALLOWED_HOSTS = [
   "hcltech.com",
   "www.wipro.com",
   "wipro.com",
+  // Investor relations hosts for the companies outside the SEC register. Each
+  // was verified to serve its published results files to an ordinary request.
+  "www.mphasis.com",
+  "mphasis.com",
+  "www.techmahindra.com",
+  "techmahindra.com",
+  "insights.techmahindra.com",
+  "www.airtel.in",
+  "airtel.in",
+  "assets.airtel.in",
+  "www.ril.com",
+  "ril.com",
+  "rilstaticasset.akamaized.net",
+  "www.ltimindtree.com",
+  "ltimindtree.com",
+  "www.coforge.com",
+  "coforge.com",
+  "www.persistent.com",
+  "persistent.com",
+  "investors.capgemini.com",
+  "www.capgemini.com",
+  "capgemini.com",
 ] as const;
 
 const BROWSER_UA =

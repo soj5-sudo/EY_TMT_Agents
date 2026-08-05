@@ -27,6 +27,11 @@ import { getCompanyNews } from "@/lib/feeds/news";
 import { findCompany, UNIVERSE, type Company } from "@/lib/data/universe";
 import { getIrHistory } from "@/lib/feeds/ir";
 import type { IrQuarter } from "@/lib/feeds/ir-parse";
+import { getFactLedger, type FactKey, type FactLedger } from "@/lib/research/facts";
+import { getFilingText, type FilingText } from "@/lib/research/filing-text";
+import { scrapeIr, type IrScrapeResult } from "@/lib/research/ir-scrape";
+import { buildLedgerFromIr } from "@/lib/research/ir-facts";
+import { getFxTable } from "@/lib/feeds/fx";
 import type { NewsItem, Quote } from "@/lib/core/types";
 
 export interface FinancialSeries {
@@ -64,6 +69,17 @@ export interface CompanyDossier {
    *  companies that do not file with the SEC. */
   irQuarters: IrQuarter[];
   irUrl: string | null;
+  /**
+   * The tagged concepts a diligence review asks for, well beyond the profit
+   * and loss summary. This is what most agents in a run actually read.
+   */
+  facts: FactLedger | null;
+  /** Narrative sections of the latest annual report. */
+  filing: FilingText | null;
+  /** Files downloaded and read from the company's own investor relations site. */
+  ir: IrScrapeResult | null;
+  /** Coverage-universe names in the same subsector, for comparative reads. */
+  peers: Company[];
   findings: AgentFinding[];
   documents: IngestedDocument[];
   sources: Provenance[];
@@ -183,6 +199,9 @@ export async function research(
 
   let profile: Awaited<ReturnType<typeof getProfile>>["data"] | null = null;
   const financials: FinancialSeries[] = [];
+  let facts: FactLedger | null = null;
+  let filing: FilingText | null = null;
+  let ir: IrScrapeResult | null = null;
 
   if (resolved.cik) {
     try {
@@ -195,25 +214,58 @@ export async function research(
       );
     }
 
-    const wanted: Array<keyof typeof CONCEPTS> = [
-      "revenue",
-      "operatingIncome",
-      "netIncome",
-      "rnd",
-      "cashFromOps",
-    ];
+    // The whole tagged history arrives in one document, so the ledger is read
+    // first and the headline series are taken from it. Fetching five concepts
+    // separately cost five round trips and returned a fifth of the material.
+    try {
+      facts = await getFactLedger(resolved.cik);
+      sources.push(facts.provenance);
+    } catch (err) {
+      warnings.push(
+        `Tagged financial concepts unavailable: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
-    for (const key of wanted) {
-      try {
-        const concept = await getConcept(resolved.cik, [...CONCEPTS[key]]);
-        if (!concept) continue;
-        const annual = annualSeries(concept.points);
-        if (annual.length >= 2) {
-          financials.push(toSeries(METRIC_LABELS[key], concept.tag, annual.slice(-8)));
-        }
-      } catch {
-        // Concept not reported by this filer. Absence is recorded by omission.
+    if (facts) {
+      const headline: Array<[FactKey, string]> = [
+        ["revenue", "Revenue"],
+        ["operatingIncome", "Operating income"],
+        ["netIncome", "Net income"],
+        ["rnd", "Research and development"],
+        ["cashFromOps", "Cash from operations"],
+        ["grossProfit", "Gross profit"],
+        ["assets", "Total assets"],
+      ];
+
+      for (const [key, label] of headline) {
+        const series = facts.series[key];
+        if (!series || series.annual.length < 2) continue;
+        financials.push({
+          metric: label,
+          tag: series.tag,
+          unit: "USD",
+          periodType: "annual",
+          points: series.annual.slice(-10).map((p) => ({
+            period: p.end,
+            label: p.label,
+            value: p.value,
+            form: p.form,
+            filed: p.filed,
+          })),
+        });
       }
+    }
+
+    // The narrative sections carry what the tagged data cannot: who the
+    // customers are, what management says it competes against, the disclosed
+    // proceedings and the principal risks the board signed off.
+    try {
+      filing = await getFilingText(resolved.cik);
+      if (filing) sources.push(filing.provenance);
+    } catch (err) {
+      warnings.push(
+        `Annual report narrative unavailable: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     if (financials.length > 0) {
@@ -238,16 +290,79 @@ export async function research(
   let irUrl: string | null = null;
 
   if (resolved.inUniverse && !resolved.inUniverse.secFiler) {
+    // Crawl the company's investor relations index and read what it publishes.
+    // These are the same figures a registrant would file; they are simply
+    // served from the company's own site as a workbook or a results release.
     try {
-      const ir = await getIrHistory(resolved.inUniverse.symbol, 8);
-      if (ir) {
-        irQuarters = ir.data.quarters;
-        irUrl = ir.data.irUrl;
-        if (irQuarters.length > 0) sources.push(ir.provenance);
+      ir = await scrapeIr(resolved.inUniverse.symbol, 3);
+      if (ir && ir.metrics.length > 0) sources.push(ir.provenance);
+      else if (ir) {
+        warnings.push(
+          `No metric rows could be read from ${ir.name} investor relations. ${ir.provenance.note ?? ""}`,
+        );
+      }
+    } catch (err) {
+      warnings.push(
+        `Investor relations scrape failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    // Published rows are mapped onto the same concept keys the registrants use,
+    // converted to US dollars at a live fixing. Without this the whole
+    // non-registrant cohort reaches the financial workstreams with nothing, and
+    // the review reports that it is waiting for documents already downloaded.
+    if (ir && ir.metrics.length > 0) {
+      try {
+        const fx = await getFxTable().catch(() => null);
+        const bridged = buildLedgerFromIr(ir, fx, resolved.inUniverse.currency);
+        if (bridged) {
+          facts = bridged.ledger;
+          sources.push(bridged.ledger.provenance);
+          if (fx && bridged.sourceCurrency && bridged.sourceCurrency !== "USD") {
+            sources.push(fx.provenance);
+          }
+          for (const [key, label] of [
+            ["revenue", "Revenue"],
+            ["operatingIncome", "Operating income"],
+            ["netIncome", "Net income"],
+            ["cashFromOps", "Cash from operations"],
+          ] as Array<[FactKey, string]>) {
+            const s = bridged.ledger.series[key];
+            if (!s) continue;
+            const points = s.annual.length >= 2 ? s.annual : s.quarterly;
+            if (points.length < 2) continue;
+            financials.push({
+              metric: label,
+              tag: s.tag,
+              unit: "USD",
+              periodType: s.annual.length >= 2 ? "annual" : "quarterly",
+              points: points.slice(-10).map((p) => ({
+                period: p.end,
+                label: p.label,
+                value: p.value,
+                form: p.form,
+                filed: p.filed,
+              })),
+            });
+          }
+        }
+      } catch (err) {
+        warnings.push(
+          `Published metrics could not be mapped onto the concept set: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    try {
+      const history = await getIrHistory(resolved.inUniverse.symbol, 8);
+      if (history) {
+        irQuarters = history.data.quarters;
+        irUrl = history.data.irUrl;
+        if (irQuarters.length > 0) sources.push(history.provenance);
         else
           warnings.push(
-            `No quarterly fact sheet could be read from ${ir.data.name} investor relations. ` +
-              ir.data.attempts
+            `No quarterly fact sheet could be read from ${history.data.name} investor relations. ` +
+              history.data.attempts
                 .slice(0, 2)
                 .map((a) => `${a.label}: ${a.reason}`)
                 .join("; "),
@@ -341,6 +456,19 @@ export async function research(
       }
     }
   }
+
+  /* --- Peer set --------------------------------------------------------- */
+
+  // A margin or a growth rate means little as a level. The agents that judge
+  // position need something to judge against, and the coverage universe is the
+  // comparison set the rest of the console already uses.
+  const peers = resolved.inUniverse
+    ? UNIVERSE.filter(
+        (c) =>
+          c.subsector === resolved.inUniverse!.subsector &&
+          c.symbol !== resolved.inUniverse!.symbol,
+      )
+    : [];
 
   /* --- Derived measures ------------------------------------------------ */
 
@@ -618,6 +746,10 @@ export async function research(
     news,
     irQuarters,
     irUrl,
+    facts,
+    filing,
+    ir,
+    peers,
     findings,
     documents,
     sources,

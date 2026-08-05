@@ -31,17 +31,6 @@ const ALLOWED_HOSTS = [
   "wipro.com",
 ] as const;
 
-/** Providers reachable only when the operator has opted in with a key. */
-const ALLOWED_LLM_HOSTS = [
-  "integrate.api.nvidia.com",
-  "router.huggingface.co",
-  "api-inference.huggingface.co",
-  "api.groq.com",
-  "openrouter.ai",
-  "localhost",
-  "127.0.0.1",
-] as const;
-
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -57,10 +46,9 @@ export class UpstreamError extends Error {
   }
 }
 
-function hostAllowed(host: string, extra: readonly string[] = []): boolean {
+function hostAllowed(host: string): boolean {
   const h = host.toLowerCase();
-  const list = [...ALLOWED_HOSTS, ...extra];
-  return list.some((allowed) => h === allowed || h.endsWith(`.${allowed}`));
+  return ALLOWED_HOSTS.some((a) => h === a || h.endsWith(`.${a}`));
 }
 
 /**
@@ -90,8 +78,6 @@ export interface FetchOptions {
   headers?: Record<string, string>;
   method?: "GET" | "POST";
   body?: string;
-  /** Permit the LLM provider hosts in addition to the data allowlist. */
-  allowLlmHosts?: boolean;
   /** Cap on the response body, in bytes. Guards against a hostile payload. */
   maxBytes?: number;
 }
@@ -117,18 +103,16 @@ export async function safeFetch(
     );
   }
 
-  const extra = opts.allowLlmHosts ? ALLOWED_LLM_HOSTS : [];
-
-  // A local Ollama or LM Studio endpoint is the one legitimate loopback
-  // target, and only when LLM hosts were explicitly requested.
-  if (isPrivateLiteral(parsed.hostname) && !opts.allowLlmHosts) {
+  // No private address is ever a legitimate target: every source this console
+  // reads is a public endpoint.
+  if (isPrivateLiteral(parsed.hostname)) {
     throw new UpstreamError(
       `Blocked private address ${parsed.hostname}`,
       parsed.hostname,
     );
   }
 
-  if (!hostAllowed(parsed.hostname, extra)) {
+  if (!hostAllowed(parsed.hostname)) {
     throw new UpstreamError(
       `Host not on allowlist: ${parsed.hostname}`,
       parsed.hostname,

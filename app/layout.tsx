@@ -13,6 +13,7 @@ const notoSans = Noto_Sans({
 });
 import { EyLogo } from "@/components/ui/EyLogo";
 import { MegaNav } from "@/components/ui/MegaNav";
+import { HeaderNav } from "@/components/ui/HeaderNav";
 import { Assistant } from "@/components/Assistant";
 
 export const metadata: Metadata = {
@@ -48,10 +49,9 @@ export default function RootLayout({
         <header className="banner">
           <div className="banner-inner">
             <a href="/" aria-label="EY TMT Intelligence, home" className="banner-brand">
-              <EyLogo height={30} />
+              <EyLogo height={48} />
             </a>
-            <span className="banner-divider" aria-hidden="true" />
-            <span className="banner-title">TMT Intelligence</span>
+            <HeaderNav />
             <MegaNav />
           </div>
         </header>

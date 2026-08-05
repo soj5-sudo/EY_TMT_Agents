@@ -251,8 +251,18 @@ function collapse(facts: RawFact[], keyOf: (f: RawFact) => string): RawFact[] {
   return [...map.values()];
 }
 
-function fiscalLabel(end: string, fy?: number): string {
-  return `FY${fy ?? Number(end.slice(0, 4))}`;
+/**
+ * Names a fiscal year from the calendar year its period ends in, which is the
+ * universal convention: NVIDIA's year ending January 2026 is fiscal 2026.
+ *
+ * The fy field on a fact is deliberately ignored. It describes the filing that
+ * reported the number, not the period the number covers, so three different
+ * years reported in one annual report all carry the same fy and collapse onto
+ * a single label. That produced a NVIDIA revenue series with FY2026 printed
+ * three times against three different values.
+ */
+function fiscalLabel(end: string): string {
+  return `FY${new Date(`${end}T00:00:00Z`).getUTCFullYear()}`;
 }
 
 /**
@@ -321,7 +331,7 @@ function buildLine(
     )
       .sort((a, b) => a.end.localeCompare(b.end))
       .map<Period>((f) => ({
-        label: fiscalLabel(f.end, f.fy),
+        label: fiscalLabel(f.end),
         start: null,
         end: f.end,
         value: f.val,
@@ -350,7 +360,7 @@ function buildLine(
   )
     .sort((a, b) => a.end.localeCompare(b.end))
     .map<Period>((f) => ({
-      label: fiscalLabel(f.end, f.fy),
+      label: fiscalLabel(f.end),
       start: f.start ?? null,
       end: f.end,
       value: f.val,

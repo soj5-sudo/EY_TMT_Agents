@@ -4,6 +4,11 @@
  */
 
 import { cached } from "@/lib/core/cache";
+import {
+  MARKET_SNAPSHOT_QUOTES,
+  MARKET_SNAPSHOT_SERIES,
+  MARKET_SNAPSHOT_TAKEN,
+} from "@/lib/data/market-snapshot";
 import { fetchJson } from "@/lib/core/fetcher";
 import type {
   Envelope,
@@ -148,21 +153,39 @@ export async function getQuote(symbol: string): Promise<Envelope<Quote>> {
     };
   } catch (err) {
     const held = lastGood.get(symbol);
-    if (!held) throw err;
+    if (held) {
+      const ageMinutes = Math.round((Date.now() - held.at) / 60000);
+      return {
+        data: held.quote,
+        provenance: {
+          kind: "cached",
+          source: "Yahoo Finance chart endpoint",
+          url: `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}`,
+          retrievedAt: new Date(held.at).toISOString(),
+          note:
+            `Upstream refused this request (${err instanceof Error ? err.message : String(err)}). ` +
+            `Showing the last successful retrieval, ${ageMinutes} minute${ageMinutes === 1 ? "" : "s"} old.`,
+        },
+      };
+    }
 
-    const ageMinutes = Math.round((Date.now() - held.at) / 60000);
-    return {
-      data: held.quote,
-      provenance: {
-        kind: "cached",
-        source: "Yahoo Finance chart endpoint",
-        url: `https://query2.finance.yahoo.com/v8/finance/chart/${symbol}`,
-        retrievedAt: new Date(held.at).toISOString(),
-        note:
-          `Upstream refused this request (${err instanceof Error ? err.message : String(err)}). ` +
-          `Showing the last successful retrieval, ${ageMinutes} minute${ageMinutes === 1 ? "" : "s"} old.`,
-      },
-    };
+    // Last tier: the committed snapshot, taken where the endpoint answered.
+    // Labelled baseline and dated, never presented as a live price.
+    const snap = MARKET_SNAPSHOT_QUOTES[symbol];
+    if (snap && MARKET_SNAPSHOT_TAKEN) {
+      return {
+        data: snap,
+        provenance: {
+          kind: "baseline",
+          source: "Yahoo Finance chart endpoint, committed snapshot",
+          retrievedAt: MARKET_SNAPSHOT_TAKEN,
+          note:
+            "The endpoint rate-limits this network. Showing the snapshot taken " +
+            `${MARKET_SNAPSHOT_TAKEN.slice(0, 10)}; the price is as of that date, not today.`,
+        },
+      };
+    }
+    throw err;
   }
 }
 
@@ -251,6 +274,30 @@ export async function getSeries(
   symbol: string,
   range = "1y",
   interval = "1d",
+): Promise<Envelope<SeriesPoint[]>> {
+  try {
+    return await getSeriesLive(symbol, range, interval);
+  } catch (err) {
+    const snap = MARKET_SNAPSHOT_SERIES[symbol];
+    if (snap && snap.length > 0 && MARKET_SNAPSHOT_TAKEN) {
+      return {
+        data: snap,
+        provenance: {
+          kind: "baseline",
+          source: "Yahoo Finance chart endpoint, committed snapshot",
+          retrievedAt: MARKET_SNAPSHOT_TAKEN,
+          note: `History as of ${MARKET_SNAPSHOT_TAKEN.slice(0, 10)}. The endpoint rate-limits this network.`,
+        },
+      };
+    }
+    throw err;
+  }
+}
+
+async function getSeriesLive(
+  symbol: string,
+  range: string,
+  interval: string,
 ): Promise<Envelope<SeriesPoint[]>> {
   const res = await cached(
     `series:${symbol}:${range}:${interval}`,

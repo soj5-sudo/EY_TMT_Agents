@@ -103,6 +103,21 @@ export default function TermsPage() {
             </li>
           </ul>
 
+          <h2>How the assistant works</h2>
+          <p>
+            There is no external language model anywhere in this console. The
+            assistant runs an in-house engine in four layers: it parses the
+            question against the coverage universe, computes the answer from
+            filed statements where the question is numeric, retrieves from the
+            console&apos;s own corpus where it is not, and composes the reply from
+            what it found. Every answer states which layer produced it.
+          </p>
+          <p>
+            The diligence agents are the same: each one computes its findings
+            from source figures. Nothing is generated, so nothing can be
+            invented.
+          </p>
+
           <h2>Your documents</h2>
           <p>
             Documents you attach are parsed in memory for your session only. They

@@ -96,6 +96,16 @@ node --experimental-strip-types scripts/harvest-ir.mts
 The application attempts a live fetch on every request and falls back to the
 snapshot only when that fails, labelling the result with the date it was taken.
 
+The quote endpoint rate-limits shared hosting networks the same way, so a
+market snapshot follows the same pattern:
+
+```bash
+node --experimental-strip-types scripts/harvest-markets.mts
+```
+
+The fallback chain for every quote is live, then last known good in process,
+then the dated snapshot, each labelled as what it is.
+
 ## Security
 
 - Automated clients refused: crawlers, extraction services, headless stacks and
@@ -113,14 +123,22 @@ snapshot only when that fails, labelling the result with the date it was taken.
 - Uploaded documents are parsed in the request that carries them and returned to
   the browser. The server retains nothing and writes nothing to disk.
 
-## Optional model provider
+## The engine
 
-The assistant works with no key, answering extractively from retrieved passages
-with citations. See `.env.example` to connect a free provider, which changes
-phrasing only. Retrieval, citation and injection defences are identical either
-way.
+No external language model anywhere. The assistant runs an in-house engine in
+four layers: parse the question against the coverage universe, compute the
+answer from filed statements where it is numeric, retrieve from the console's
+own corpus where it is not, compose the reply. Every answer states which layer
+produced it.
+
+The diligence agents work the same way: each computes its findings from source
+figures. Nothing is generated, so nothing can be invented.
 
 ## Deploy
+
+Every push to main deploys automatically through the GitHub Actions workflow in
+`.github/workflows/deploy.yml`, which runs the Vercel CLI with repository
+secrets. To deploy by hand:
 
 ```bash
 npx vercel@latest deploy --prod --yes

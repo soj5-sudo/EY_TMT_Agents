@@ -88,7 +88,7 @@
     --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
       monospace;
 
-    --banner-h: 56px;
+    --banner-h: 85px;
     --nav-h: 52px;
     --shell-max: 1440px;
   }
@@ -263,9 +263,10 @@ a {
   }
 }
 
-/* Top EY banner: black bar, yellow mark. Matches ey.com's masthead weight. */
+/* Masthead to ey.com's shipped spec: #2e2e38 bar, 85px tall, 44px side
+   padding, full bleed, one-rem bold links, yellow underline for state. */
 .banner {
-  background: var(--ey-black);
+  background: var(--ey-charcoal);
   color: var(--text-on-inverse);
   height: var(--banner-h);
   display: flex;
@@ -276,37 +277,49 @@ a {
 }
 
 .banner-inner {
-  max-width: var(--shell-max);
-  margin: 0 auto;
-  padding: 0 var(--s-5);
   width: 100%;
+  padding: 0 44px;
   display: flex;
   align-items: center;
-  gap: var(--s-4);
+  gap: 40px;
 }
 
 @media (max-width: 720px) {
+  :root { --banner-h: 64px; }
   .banner-inner {
     padding: 0 var(--s-3);
     gap: var(--s-3);
   }
 }
 
-.banner-divider {
-  width: 1px;
-  height: 22px;
-  background: rgba(255, 255, 255, 0.22);
-  flex: none;
+.masthead-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 32px;
+  height: 100%;
 }
 
-.banner-title {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+.masthead-link {
+  display: inline-flex;
+  align-items: center;
+  height: var(--banner-h);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5rem;
   color: var(--ey-white);
+  border-bottom: 4px solid transparent;
+  border-top: 4px solid transparent;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  transition: border-color var(--t-micro) var(--ease-out);
+}
+
+.masthead-link:hover,
+.masthead-link[data-active="true"] {
+  border-bottom-color: var(--accent);
+}
+
+@media (max-width: 1160px) {
+  .masthead-nav { display: none; }
 }
 
 .banner-brand {

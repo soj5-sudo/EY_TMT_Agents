@@ -17,6 +17,7 @@ import { getFactLedger, type FactKey, type FactLedger } from "@/lib/research/fac
 import { scrapeIr } from "@/lib/research/ir-scrape";
 import { buildLedgerFromIr } from "@/lib/research/ir-facts";
 import { getFxTable } from "@/lib/feeds/fx";
+import { snapshotLedger } from "@/lib/research/ir-snapshot-ledger";
 import { resolveCik } from "@/lib/feeds/sec";
 import type { Company } from "@/lib/data/universe";
 import type { MetricKey } from "@/lib/brain/intent";
@@ -44,26 +45,36 @@ export async function ledgerFor(company: Company): Promise<CompanyLedger> {
     return { ledger, provenance: ledger.provenance, unavailable: null };
   }
 
+  // Live first. Several publishers refuse a request originating from a hosting
+  // provider while serving the identical URL to an ordinary connection, so the
+  // deployed console reaches fewer of these documents than a laptop does. The
+  // harvested copy is the fallback rather than the source, and it is dated.
   const scraped = await scrapeIr(company.symbol, 3).catch(() => null);
-  if (!scraped || scraped.metrics.length === 0) {
-    return {
-      ledger: null,
-      provenance: null,
-      unavailable: `No published results file could be read for ${company.short}.`,
-    };
+
+  if (scraped && scraped.metrics.length > 0) {
+    const fx = await getFxTable().catch(() => null);
+    const bridged = buildLedgerFromIr(scraped, fx, company.currency);
+    if (bridged) {
+      return {
+        ledger: bridged.ledger,
+        provenance: bridged.ledger.provenance,
+        unavailable: null,
+      };
+    }
   }
 
-  const fx = await getFxTable().catch(() => null);
-  const bridged = buildLedgerFromIr(scraped, fx, company.currency);
-  if (!bridged) {
-    return {
-      ledger: null,
-      provenance: scraped.provenance,
-      unavailable: `${company.short} publishes results files, but none of the rows could be mapped onto a standard measure.`,
-    };
+  const harvested = snapshotLedger(company.symbol);
+  if (harvested) {
+    return { ledger: harvested, provenance: harvested.provenance, unavailable: null };
   }
 
-  return { ledger: bridged.ledger, provenance: bridged.ledger.provenance, unavailable: null };
+  return {
+    ledger: null,
+    provenance: scraped?.provenance ?? null,
+    unavailable: scraped
+      ? `${company.short} publishes results files, but none of the rows could be mapped onto a standard measure.`
+      : `No published results file could be read for ${company.short}.`,
+  };
 }
 
 /* ------------------------------------------------------------------ *

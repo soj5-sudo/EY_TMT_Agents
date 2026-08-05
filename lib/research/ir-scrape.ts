@@ -102,22 +102,6 @@ export const IR_INDEXES: IrIndex[] = [
       "https://www.ltimindtree.com/investors/",
     ],
   },
-  {
-    symbol: "INFY.NS",
-    name: "Infosys Limited",
-    urls: [
-      "https://www.infosys.com/investors/reports-filings/quarterly-results.html",
-      "https://www.infosys.com/investors.html",
-    ],
-  },
-  {
-    symbol: "WIPRO.NS",
-    name: "Wipro Limited",
-    urls: [
-      "https://www.wipro.com/investors/quarterly-results/",
-      "https://www.wipro.com/investors/",
-    ],
-  },
 ];
 
 export function irIndexFor(symbol: string): IrIndex | null {

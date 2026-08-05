@@ -38,6 +38,12 @@ export interface Company {
   themes: Theme[];
   /** Set when the company files with the SEC, which enables the filings agent. */
   secFiler: boolean;
+  /**
+   * Why this name carries no reported figures, when it carries none. Set only
+   * where the limit is real and known, so the interface can say what is missing
+   * and why rather than leaving a blank cell for the reader to interpret.
+   */
+  coverageNote?: string;
 }
 
 export const UNIVERSE: Company[] = [
@@ -45,20 +51,18 @@ export const UNIVERSE: Company[] = [
   { symbol: "ACN", name: "Accenture plc", short: "Accenture", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation", "ai-software"], secFiler: true },
   { symbol: "IBM", name: "International Business Machines", short: "IBM", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["ai-software", "cloud", "digital-transformation"], secFiler: true },
   { symbol: "CTSH", name: "Cognizant Technology Solutions", short: "Cognizant", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation"], secFiler: true },
-  { symbol: "INFY", name: "Infosys Limited", short: "Infosys ADR", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation", "ai-software"], secFiler: true },
-  { symbol: "WIT", name: "Wipro Limited", short: "Wipro ADR", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation"], secFiler: true },
+  { symbol: "INFY", name: "Infosys Limited", short: "Infosys", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation", "ai-software"], secFiler: true },
+  { symbol: "WIT", name: "Wipro Limited", short: "Wipro", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation"], secFiler: true },
   { symbol: "EPAM", name: "EPAM Systems", short: "EPAM", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation"], secFiler: true },
   { symbol: "DXC", name: "DXC Technology", short: "DXC", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation"], secFiler: true },
   { symbol: "TCS.NS", name: "Tata Consultancy Services", short: "TCS", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "ai-software"], secFiler: false },
-  { symbol: "INFY.NS", name: "Infosys Limited", short: "Infosys", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "ai-software"], secFiler: false },
   { symbol: "HCLTECH.NS", name: "HCL Technologies", short: "HCLTech", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
-  { symbol: "WIPRO.NS", name: "Wipro Limited", short: "Wipro", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
-  { symbol: "TECHM.NS", name: "Tech Mahindra", short: "Tech M", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "connectivity"], secFiler: false },
-  { symbol: "LTIM.NS", name: "LTIMindtree", short: "LTIMindtree", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
+  { symbol: "TECHM.NS", name: "Tech Mahindra", short: "Tech M", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "connectivity"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
+  { symbol: "LTIM.NS", name: "LTIMindtree", short: "LTIMindtree", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
   { symbol: "MPHASIS.NS", name: "Mphasis Limited", short: "Mphasis", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
-  { symbol: "COFORGE.NS", name: "Coforge Limited", short: "Coforge", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
-  { symbol: "PERSISTENT.NS", name: "Persistent Systems", short: "Persistent", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "ai-software"], secFiler: false },
-  { symbol: "CAP.PA", name: "Capgemini SE", short: "Capgemini", sector: "Technology", subsector: "IT services", region: "Europe", currency: "EUR", themes: ["digital-transformation"], secFiler: false },
+  { symbol: "COFORGE.NS", name: "Coforge Limited", short: "Coforge", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
+  { symbol: "PERSISTENT.NS", name: "Persistent Systems", short: "Persistent", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "ai-software"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
+  { symbol: "CAP.PA", name: "Capgemini SE", short: "Capgemini", sector: "Technology", subsector: "IT services", region: "Europe", currency: "EUR", themes: ["digital-transformation"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
 
   // --- Software and platforms -----------------------------------------
   { symbol: "MSFT", name: "Microsoft Corporation", short: "Microsoft", sector: "Technology", subsector: "Software and platforms", region: "US", currency: "USD", themes: ["ai-software", "ai-agents", "cloud"], secFiler: true },
@@ -111,7 +115,7 @@ export const UNIVERSE: Company[] = [
   { symbol: "TMUS", name: "T-Mobile US Inc", short: "T-Mobile", sector: "Telecom", subsector: "Telecom operators", region: "US", currency: "USD", themes: ["connectivity"], secFiler: true },
   { symbol: "VOD", name: "Vodafone Group plc", short: "Vodafone", sector: "Telecom", subsector: "Telecom operators", region: "Europe", currency: "USD", themes: ["connectivity"], secFiler: true },
   { symbol: "BHARTIARTL.NS", name: "Bharti Airtel Limited", short: "Bharti Airtel", sector: "Telecom", subsector: "Telecom operators", region: "India", currency: "INR", themes: ["connectivity"], secFiler: false },
-  { symbol: "RELIANCE.NS", name: "Reliance Industries", short: "Reliance", sector: "Telecom", subsector: "Telecom operators", region: "India", currency: "INR", themes: ["connectivity"], secFiler: false },
+  { symbol: "RELIANCE.NS", name: "Reliance Industries", short: "Reliance", sector: "Telecom", subsector: "Telecom operators", region: "India", currency: "INR", themes: ["connectivity"], secFiler: false, coverageNote: "Publishes results as a media release laid out as prose. Its tables state figures without naming units on the row, so no absolute figure can be read without assuming a scale." },
 ];
 
 export const INDICES = [
@@ -161,7 +165,6 @@ export const DEFAULT_WATCH = [
   "ACN",
   "IBM",
   "TCS.NS",
-  "INFY.NS",
   "NVDA",
   "MSFT",
   "GOOGL",

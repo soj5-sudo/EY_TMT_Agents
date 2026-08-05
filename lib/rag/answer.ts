@@ -19,6 +19,7 @@
 import { Bm25Index, type RagDoc, type ScoredDoc } from "@/lib/rag/bm25";
 import { staticCorpus, newsDocs, quoteDocs } from "@/lib/rag/corpus";
 import { computeAnswer } from "@/lib/brain/engine";
+import { parseQuestion } from "@/lib/brain/intent";
 import type { NewsItem, Provenance, Quote } from "@/lib/core/types";
 
 export interface Citation {
@@ -107,6 +108,12 @@ function relevantSentences(body: string, terms: Set<string>, limit: number): str
 
   scored.sort((a, b) => b.score - a.score);
   const picked = scored.filter((s) => s.score > 0).slice(0, limit);
+
+  // With no matched terms, as when documentation is served because the wording
+  // missed rather than because the answer is absent, the opening sentences are
+  // the right extract: documentation is written with its summary first.
+  if (picked.length === 0) return sentences.slice(0, limit);
+
   return sentences.filter((s) => picked.some((p) => p.sentence === s));
 }
 
@@ -121,8 +128,31 @@ const NO_ANSWER =
   "the filed statements behind it, the live feeds, and the console's own documentation. " +
   "Try naming a company and a measure, such as the operating margin of a name in the universe.";
 
-export function answerExtractive(index: Bm25Index, question: string): Answer {
-  const hits = rerank(index.search(question, 10), question);
+/** Sections that describe the console rather than the companies it covers. */
+const DOC_SECTIONS = new Set(["Product", "Diligence method"]);
+
+export function answerExtractive(
+  index: Bm25Index,
+  question: string,
+  /** Restricts retrieval to documentation when the question is about the
+   *  console itself. Without it, "what can this tool do" retrieves whichever
+   *  press headline happens to share a word with the question, which reads as
+   *  a non sequitur and undermines every other answer on the page. */
+  documentationOnly = false,
+): Answer {
+  let hits = rerank(index.search(question, 20), question);
+  if (documentationOnly) {
+    hits = hits.filter((h) => !h.doc.untrusted && DOC_SECTIONS.has(h.doc.section));
+
+    // A question about the console phrased in words the documentation does not
+    // happen to use still deserves the documentation. Retrieval that returns
+    // nothing here means the wording missed, not that the answer is absent.
+    if (hits.length === 0) {
+      const overview = index.bySection("Product").slice(0, 3);
+      hits = overview.map((doc) => ({ doc, score: 1, matchedTerms: [] }));
+    }
+  }
+  hits = hits.slice(0, 10);
 
   const empty: Answer = {
     text: NO_ANSWER,
@@ -202,7 +232,10 @@ export async function answerQuestion(index: Bm25Index, question: string): Promis
     };
   }
 
-  const retrieved = answerExtractive(index, question);
+  // A question about the console is answered from the console's own
+  // documentation rather than from company coverage.
+  const parsed = parseQuestion(question);
+  const retrieved = answerExtractive(index, question, parsed.intent === "product");
 
   // A computation that ran but found the measure unreported is a better answer
   // than a loosely related passage, so it is carried through.

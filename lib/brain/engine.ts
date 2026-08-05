@@ -212,12 +212,17 @@ function composeTrend(t: TrendResult): BrainAnswer {
     }
   }
 
+  // Every unit needs its own wording. Without the days and count cases a
+  // movement in receivable days printed as a bare "7.586", which reads as an
+  // unfinished sentence and undermines figures that are otherwise correct.
   const movement =
     t.metric.unit === "%"
       ? `${Math.abs(change).toFixed(1)} percentage points`
       : t.metric.unit === "USD"
         ? fmt(Math.abs(change), t.metric)
-        : Math.abs(change).toLocaleString("en-US");
+        : t.metric.unit === "days"
+          ? `${Math.abs(change).toFixed(0)} day${Math.abs(change) < 1.5 ? "" : "s"}`
+          : `${Math.round(Math.abs(change)).toLocaleString("en-US")}`;
 
   return {
     text:
@@ -226,7 +231,13 @@ function composeTrend(t: TrendResult): BrainAnswer {
       (t.cagrPct !== null && t.spanYears
         ? `, a compound annual rate of ${t.cagrPct.toFixed(1)} percent over ${t.spanYears} years` : "") +
       `. The largest single move was ${biggest.delta >= 0 ? "up" : "down"} ` +
-      `${t.metric.unit === "%" ? `${Math.abs(biggest.delta).toFixed(1)} points` : short(Math.abs(biggest.delta), t.metric)} ` +
+      `${
+        t.metric.unit === "%"
+          ? `${Math.abs(biggest.delta).toFixed(1)} points`
+          : t.metric.unit === "days"
+            ? `${Math.abs(biggest.delta).toFixed(0)} days`
+            : short(Math.abs(biggest.delta), t.metric)
+      } ` +
       `between ${biggest.from.label} and ${biggest.to.label}.`,
     method: "computed",
     sources: dedupeSources([t.provenance]),

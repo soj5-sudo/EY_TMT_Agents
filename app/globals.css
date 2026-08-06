@@ -2114,3 +2114,185 @@ button.source-tag {
   font-weight: 700;
   box-shadow: inset 0 -3px 0 var(--accent);
 }
+
+/* ==========================================================================
+   IT services tracker
+
+   The commentary list is the reason the page exists. A quarter's figures are
+   published in a dozen places; the sentence management gave for why a measure
+   moved is not, so the reason gets reading-size type and a measure of column
+   width, and the figures sit around it rather than over it.
+   ========================================================================== */
+
+/* The peer table carries eight columns. A grid item takes its content as its
+   minimum size, so without this the panel widens the whole page on a narrow
+   screen instead of letting the table scroll inside its own frame. */
+.trk-shell .panel {
+  min-width: 0;
+}
+
+/* The tier and measure controls stand alone above the panels, so the bar
+   carries no bottom rule of its own. */
+.trk-filters {
+  border-bottom: 0;
+}
+
+/* Cohort position for the selected measure, stated before the bars so the
+   reader knows what the tier as a whole did before reading names. */
+.trk-cohorts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1px;
+  background: var(--border-hairline);
+  border: 1px solid var(--border-hairline);
+  margin-bottom: var(--s-4);
+}
+
+.trk-cohort {
+  background: var(--surface);
+  padding: var(--s-3);
+}
+
+.trk-cohort-value {
+  font-size: 18px;
+  line-height: 1.25;
+  margin-top: var(--s-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.trk-cohort-sub {
+  font-size: 12px;
+  margin-top: var(--s-1);
+}
+
+/* A company name that selects. Reads as text until it is hovered, because a
+   table of buttons reads as a form rather than a record. */
+.trk-pick {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  border-bottom: 1px solid transparent;
+}
+
+.trk-pick:hover {
+  border-bottom-color: var(--border-emphasis);
+}
+
+.tbl tr[data-selected="true"] td,
+.tbl tr[data-selected="true"] .tbl-rowhead {
+  background: var(--ey-off-white);
+}
+
+.tbl tr[data-selected="true"] .tbl-rowhead {
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Management commentary. */
+.trk-said {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trk-said-item {
+  padding: var(--s-4);
+  border-bottom: 1px solid var(--border-hairline);
+  border-left: 3px solid transparent;
+}
+
+.trk-said-item:last-child {
+  border-bottom: 0;
+}
+
+.trk-said-item[data-selected="true"] {
+  border-left-color: var(--accent);
+  background: var(--ey-off-white);
+}
+
+.trk-said-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trk-said-name {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.trk-said-tier {
+  font-size: 10px;
+}
+
+.trk-said-spacer {
+  flex: 1;
+}
+
+.trk-said-move {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.trk-reason {
+  margin-top: var(--s-3);
+  max-width: 82ch;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.trk-said-src {
+  margin-top: var(--s-2);
+  font-size: 12px;
+}
+
+/* A company name is a proper noun, not a column label, so it keeps its own
+   case. Carried on its own class because a row header alone is outranked by
+   the uppercase treatment the table gives every other th. */
+.tbl .trk-name {
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+  min-width: 180px;
+}
+
+/* The reporting period a peer row is taken from. Never implied, never
+   inherited from the row above it. */
+.trk-period {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+/* Investor and transaction text runs long and is prose, not a figure. */
+.trk-wrap {
+  white-space: normal;
+  min-width: 180px;
+  max-width: 320px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.trk-foot {
+  padding: var(--s-3) var(--s-4);
+  border-top: 1px solid var(--border-hairline);
+  font-size: 12px;
+}
+
+@media (max-width: 720px) {
+  .trk-said-head {
+    gap: 8px;
+  }
+
+  .trk-said-spacer {
+    display: none;
+  }
+}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiFetch } from "@/lib/client/api";
 import type { NewsItem } from "@/lib/core/types";
 import { TIER_LABEL } from "@/lib/sources/registry";
 
@@ -48,15 +49,68 @@ export function SourceList({
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
 
+  // The feed is a fixed set of standing queries, so a company outside them has
+  // no coverage in it and filtering the fetched set returns nothing while the
+  // open web returns plenty. A typed term is therefore also sent as a live
+  // search, and what comes back is merged in.
+  const [live, setLive] = useState<NewsItem[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchNote, setSearchNote] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const runSearch = useCallback(async (term: string) => {
+    if (term.trim().length < 2) {
+      setLive([]);
+      setSearchNote(null);
+      return;
+    }
+    setSearching(true);
+    try {
+      const json = await apiFetch<{ items: NewsItem[]; provenance?: { note?: string } }>(
+        `/api/feeds/search?q=${encodeURIComponent(term.trim())}`,
+        { timeoutMs: 60_000 },
+      );
+      setLive(json.items ?? []);
+      setSearchNote(json.provenance?.note ?? null);
+    } catch {
+      setLive([]);
+      setSearchNote("The open search could not be reached. Showing the loaded feed only.");
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => runSearch(query), 450);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [query, runSearch]);
+
   // Newest first. A coverage feed that is not in date order reads as a pile.
+  // Live results first, then the loaded feed, deduplicated on the headline so a
+  // story present in both appears once.
+  const merged = useMemo(() => {
+    const seen = new Set<string>();
+    const out: NewsItem[] = [];
+    for (const i of [...live, ...items]) {
+      const k = i.title.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 80);
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      out.push(i);
+    }
+    return out;
+  }, [live, items]);
+
   const ordered = useMemo(
     () =>
-      [...items].sort((a, b) => {
+      [...merged].sort((a, b) => {
         const at = a.publishedAt ? Date.parse(a.publishedAt) : 0;
         const bt = b.publishedAt ? Date.parse(b.publishedAt) : 0;
         return bt - at;
       }),
-    [items],
+    [merged],
   );
 
   const matches = useMemo(() => {
@@ -125,7 +179,7 @@ export function SourceList({
             onChange={(e) => setQuery(e.target.value)}
           />
           <span className="filter-count t-small">
-            {filtered.length} of {items.length}
+            {searching ? "Searching" : `${filtered.length} of ${merged.length}`}
           </span>
           {active && (
             <button type="button" className="btn btn-ghost filter-clear" onClick={clear}>
@@ -182,11 +236,19 @@ export function SourceList({
         </FilterRow>
       </div>
 
+      {searchNote && query.trim().length >= 2 && (
+        <p className="t-small" style={{ padding: "10px 24px 0", margin: 0, fontSize: 12 }}>
+          {searchNote}
+        </p>
+      )}
+
       {shown.length === 0 ? (
         <div className="empty">
           <p className="empty-title">Nothing matches those filters</p>
           <p className="empty-body">
-            Clear one of them, or widen the search term. The feed itself is unchanged.
+            {searching
+              ? "Searching published coverage for this term."
+              : "Clear one of them, or widen the search term."}
           </p>
         </div>
       ) : (
@@ -231,7 +293,9 @@ export function SourceList({
               <div className="source-attr">
                 <span className="tier-dot" data-tier={item.publisherTier} aria-hidden="true" />
                 <span>{item.publisher}</span>
-                <span className="source-tier-note">{TIER_LABEL[item.publisherTier]}</span>
+                <span className="source-tier-note">
+                  {item.verified === false ? "Outside the reviewed list" : TIER_LABEL[item.publisherTier]}
+                </span>
               </div>
             </li>
           ))}

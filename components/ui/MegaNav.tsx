@@ -37,6 +37,14 @@ const DESTINATIONS: Destination[] = [
     detail:
       "Revenue distribution by market and domain on four growth bases, client concentration, headcount, attrition, and derived unit economics.",
   },
+  {
+    index: "06",
+    href: "/dashboard/tracker",
+    title: "IT services tracker",
+    summary: "The quarterly sector record",
+    detail:
+      "Revenue, margin, headcount, attrition and utilisation across twelve Indian names, Sep'24 against Dec'24, each figure carrying the management commentary behind it. Sixty six peers alongside, on their own reported periods.",
+  },
 ];
 
 const TOOLS: Destination[] = [

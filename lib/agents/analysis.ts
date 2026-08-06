@@ -1,18 +1,3 @@
-/**
- * Agent analysis.
- *
- * One function per agent. Each reads the shared record and computes something
- * from it: a ratio, a comparison against the peer set, a disclosed sentence
- * from the annual report, a figure from a workbook the company published.
- *
- * The rule every function follows is that a finding must be derivable from a
- * retrieved value. Where the evidence for an agent's question is genuinely not
- * public, the agent raises a specific request naming the document and who holds
- * it, rather than restating its own remit in different words. A run in which
- * most agents say only that they reviewed the record is not a review, and the
- * request list is the honest output in that case.
- */
-
 import type { CompanyDossier } from "@/lib/research/company";
 import type { FactKey, FactLedger } from "@/lib/research/facts";
 import type { FilingText, SectionRole, TextSignal } from "@/lib/research/filing-text";
@@ -40,10 +25,6 @@ export interface PriorFinding {
 
 export type SeatFn = (d: CompanyDossier, e: Emit, prior: PriorFinding[]) => void;
 
-/* ------------------------------------------------------------------ *
- * Formatting
- * ------------------------------------------------------------------ */
-
 function usd(v: number): string {
   const a = Math.abs(v);
   if (a >= 1e12) return `${(v / 1e12).toFixed(2)}tn`;
@@ -65,10 +46,6 @@ function n0(v: number): string {
   return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-/* ------------------------------------------------------------------ *
- * Reading the record
- * ------------------------------------------------------------------ */
-
 function f(d: CompanyDossier, k: FactKey): number | null {
   return d.facts?.series[k]?.latest ?? null;
 }
@@ -77,7 +54,6 @@ function fPrior(d: CompanyDossier, k: FactKey): number | null {
   return d.facts?.series[k]?.prior ?? null;
 }
 
-/** Balance sheet reads use the latest instant rather than a duration. */
 function bal(d: CompanyDossier, k: FactKey): number | null {
   return d.facts?.series[k]?.instant ?? null;
 }
@@ -90,15 +66,6 @@ function annual(d: CompanyDossier, k: FactKey) {
   return d.facts?.series[k]?.annual ?? [];
 }
 
-/**
- * The longest usable run of periods for a concept.
- *
- * Registrants file years, and a publisher outside the register usually
- * publishes quarters with at most one full year alongside. Reading only the
- * annual series therefore starves every trend test for the entire
- * non-registrant cohort, which is not an absence of evidence, only an absence
- * of that particular shape of it.
- */
 function history(d: CompanyDossier, k: FactKey) {
   const s = d.facts?.series[k];
   if (!s) return [];
@@ -107,11 +74,6 @@ function history(d: CompanyDossier, k: FactKey) {
   return s.annual.length >= 2 ? s.annual : s.quarterly;
 }
 
-/**
- * Two concepts over the same periods, on whichever basis actually pairs.
- * Mixing an annual numerator with a quarterly denominator produces a ratio
- * that is wrong by a factor of four and carries no sign of it.
- */
 function paired(d: CompanyDossier, a: FactKey, b: FactKey) {
   const sa = d.facts?.series[a];
   const sb = d.facts?.series[b];
@@ -128,11 +90,6 @@ function paired(d: CompanyDossier, a: FactKey, b: FactKey) {
   return [];
 }
 
-/**
- * A ratio that refuses to divide by a denominator too small to carry meaning.
- * Without the floor a near-zero denominator prints a four-figure percentage
- * that reads as a finding and is arithmetic noise.
- */
 function safeRatio(num: number | null, den: number | null, floor = 0): number | null {
   if (num === null || den === null) return null;
   if (den === 0 || Math.abs(den) <= floor) return null;
@@ -144,7 +101,6 @@ function marginOf(d: CompanyDossier, k: FactKey): number | null {
   return r === null ? null : r * 100;
 }
 
-/** Days a balance represents against an annual flow. */
 function days(balance: number | null, flow: number | null): number | null {
   const r = safeRatio(balance, flow);
   return r === null ? null : r * 365;
@@ -166,33 +122,20 @@ function sig(d: CompanyDossier, key: keyof FilingText["signals"]): TextSignal[] 
   return d.filing?.signals[key] ?? [];
 }
 
-/** Trims a disclosed sentence to something quotable in a paper. */
 function quote(s: string, max = 300): string {
   const t = s.replace(/\s+/g, " ").trim();
   return t.length <= max ? t : `${t.slice(0, max - 3)}...`;
 }
 
-/** The first percentage in a sentence, when it states one. */
 function firstPct(s: string): number | null {
   const m = s.match(/(\d{1,3}(?:\.\d+)?)\s?(?:%|percent)/);
   return m ? Number(m[1]) : null;
 }
 
-/**
- * Headcount stated in a disclosure sentence.
- *
- * The number has to be taken from immediately before the noun it counts.
- * Taking the first large integer in the sentence instead reads the year out of
- * "As of August 31, 2025, we employed approximately 779,000 people" and then
- * divides revenue by it, which produces a revenue per head figure three orders
- * of magnitude wrong and entirely plausible looking.
- */
 const HEADCOUNT =
   /\b(\d{1,3}(?:,\d{3})+|\d{4,})\b(?:\s+(?:full[- ]time|part[- ]time|permanent|regular))?\s+(?:employees|people|professionals|personnel|staff|colleagues)\b/i;
 
 function employeeCount(d: CompanyDossier): { count: number; sentence: string } | null {
-  // A publisher outside the register states headcount as a row in its own
-  // results file rather than in a narrative sentence.
   const published = d.facts?.series.employees;
   const latest = published?.annual.at(-1) ?? published?.quarterly.at(-1);
   if (latest && latest.value >= 50) {
@@ -206,7 +149,6 @@ function employeeCount(d: CompanyDossier): { count: number; sentence: string } |
     const m = s.sentence.match(HEADCOUNT);
     if (!m) continue;
     const n = Number(m[1].replace(/,/g, ""));
-    // A bare four digit number in this position is almost always a year.
     if (!Number.isFinite(n) || n < 50) continue;
     if (n >= 1900 && n <= 2100 && !m[1].includes(",")) continue;
     return { count: n, sentence: s.sentence };
@@ -214,7 +156,6 @@ function employeeCount(d: CompanyDossier): { count: number; sentence: string } |
   return null;
 }
 
-/** Currency the investor relations figures are stated in. */
 function irCurrency(d: CompanyDossier): string {
   return d.resolved.inUniverse?.currency ?? "local currency";
 }
@@ -224,7 +165,6 @@ function irMetric(d: CompanyDossier, patterns: RegExp[]) {
   return findMetric(d.ir.metrics, patterns);
 }
 
-/** Median of a set, used wherever a peer comparison is made. */
 function median(xs: number[]): number | null {
   if (xs.length === 0) return null;
   const s = [...xs].sort((a, b) => a - b);
@@ -232,17 +172,6 @@ function median(xs: number[]): number | null {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-
-/**
- * What the console actually holds for a subject outside the SEC register.
- *
- * These companies publish everything a registrant files, but as workbooks and
- * results releases on their own site rather than as a narrative annual report
- * with numbered items. An agent whose question is normally answered from that
- * narrative still has the published record in front of it, and saying what was
- * searched and what was found is a real answer. Reporting the agent as blocked
- * would be false: the documents are downloaded and parsed.
- */
 function publishedBase(d: CompanyDossier): string | null {
   if (!d.ir || d.ir.metrics.length === 0) return null;
   const files = d.ir.read.filter((r) => r.ok).map((r) => r.doc.filename);
@@ -250,7 +179,6 @@ function publishedBase(d: CompanyDossier): string | null {
   try {
     host = new URL(d.ir.indexUrl).hostname;
   } catch {
-    // Keep the raw string when the index URL is not parseable.
   }
   return (
     `${d.ir.metrics.length} published metric rows covering ${d.ir.periods.length} periods, ` +
@@ -258,7 +186,6 @@ function publishedBase(d: CompanyDossier): string | null {
   );
 }
 
-/** Where a non-registrant's equivalent narrative disclosure is actually filed. */
 function narrativeHome(d: CompanyDossier): string {
   const region = d.resolved.inUniverse?.region;
   if (region === "India") return "the annual report and the stock exchange filings made to BSE and NSE";
@@ -266,14 +193,9 @@ function narrativeHome(d: CompanyDossier): string {
   return "the annual report published on the company's own investor relations site";
 }
 
-/* ------------------------------------------------------------------ *
- * Shared request text
- * ------------------------------------------------------------------ */
-
 const DATA_ROOM = "Company or vendor data room";
 const IR_SITE = "Company investor relations site";
 
-/** Names the source an agent already holds, so a request is not made twice. */
 function held(d: CompanyDossier): string {
   const parts: string[] = [];
   if (d.facts) parts.push(`${d.facts.conceptsResolved} tagged concepts`);
@@ -282,10 +204,6 @@ function held(d: CompanyDossier): string {
   if (d.documents.length > 0) parts.push(`${d.documents.length} supplied documents`);
   return parts.join(", ");
 }
-
-/* ================================================================== *
- * 00 Context and intake
- * ================================================================== */
 
 const search: SeatFn = (d, e) => {
   if (d.resolved.cik) {
@@ -435,9 +353,6 @@ const explain: SeatFn = (d, e) => {
   const op = marginOf(d, "operatingIncome");
 
   if (business) {
-    // The opening paragraphs of the business item are the company's own
-    // description of what it sells. Quoting it is what stops the reader
-    // substituting their assumption about the business model.
     const opening = business.text
       .split("\n")
       .map((l) => l.trim())
@@ -478,10 +393,6 @@ const explain: SeatFn = (d, e) => {
   );
 };
 
-/* ================================================================== *
- * 01 Screening and thesis
- * ================================================================== */
-
 const screen: SeatFn = (d, e) => {
   const rev = d.derived.latestRevenueUsd;
   const cagr = d.derived.revenueCagrPct;
@@ -506,7 +417,6 @@ const screen: SeatFn = (d, e) => {
     { label: "Revenue", value: `${usd(rev)} USD` },
   );
 
-  // Scale relative to the sector the subject sits in.
   if (d.resolved.inUniverse) {
     e.find(
       "info",
@@ -704,10 +614,6 @@ const strategicFit: SeatFn = (d, e) => {
   );
 };
 
-/* ================================================================== *
- * 02 Commercial
- * ================================================================== */
-
 const market: SeatFn = (d, e) => {
   const geo = sig(d, "geography");
   const cagr = d.derived.revenueCagrPct;
@@ -846,8 +752,6 @@ const customer: SeatFn = (d, e) => {
     said = true;
   }
 
-  // Receivables days are the collection read, and they are computable from the
-  // tagged record without any management input.
   const dso = days(bal(d, "receivables"), f(d, "revenue"));
   if (dso !== null) {
     const priorDso = days(d.facts?.series.receivables?.annual.at(-2)?.value ?? null, fPrior(d, "revenue"));
@@ -948,7 +852,6 @@ const growthDrivers: SeatFn = (d, e) => {
     said = true;
   }
 
-  // Where the subject publishes its own operating metrics, read them.
   const irRev = irMetric(d, [/^revenue$/i, /^total revenue/i, /^gross revenue/i, /revenue from operations/i]);
   if (irRev && irRev.values.length >= 2) {
     const vals = irRev.values;
@@ -980,10 +883,6 @@ const growthDrivers: SeatFn = (d, e) => {
     "medium",
   );
 };
-
-/* ================================================================== *
- * 03 Financial
- * ================================================================== */
 
 const revenueQuality: SeatFn = (d, e) => {
   const series = history(d, "revenue");
@@ -1021,8 +920,6 @@ const revenueQuality: SeatFn = (d, e) => {
     { label: "Growth dispersion", value: `${vol.toFixed(1)} pts` },
   );
 
-  // Contracted backlog against recognised revenue is the repeatability read
-  // that does not depend on management characterising its own revenue.
   const rpo = f(d, "orderBook");
   const rev = f(d, "revenue");
   if (rpo !== null && rev !== null) {
@@ -1072,8 +969,6 @@ const margin: SeatFn = (d, e) => {
     { label: "Operating margin", value: `${latest.margin.toFixed(1)}%` },
   );
 
-  // Decompose into the cost lines the filer actually tags, which is what turns
-  // a margin movement into an explanation rather than an observation.
   const parts: string[] = [];
   for (const [key, name] of [
     ["costOfRevenue", "cost of revenue"],
@@ -1186,10 +1081,6 @@ const cashFlow: SeatFn = (d, e) => {
     .map((x) => ({ label: x.label, conv: (x.a / x.b) * 100 }));
 
   if (conv.length === 0) {
-    // Some publishers issue a profit and loss and a balance sheet but no cash
-    // flow statement. The cash balance is still published, and its movement is
-    // a real measure, so long as it is not presented as though it were the
-    // flow: a balance rises on borrowing exactly as it does on trading.
     const cashSeries = history(d, "cash");
     if (cashSeries.length >= 2) {
       const first = cashSeries[0];
@@ -1234,7 +1125,6 @@ const cashFlow: SeatFn = (d, e) => {
     { label: "Cash conversion", value: `${latest.conv.toFixed(0)}%` },
   );
 
-  // Free cash flow is the figure a buyer actually services debt out of.
   const ops = f(d, "cashFromOps");
   const capex = f(d, "capex");
   if (ops !== null && capex !== null) {
@@ -1280,8 +1170,6 @@ const qualityOfEarnings: SeatFn = (d, e, prior) => {
     return;
   }
 
-  // The accrual ratio is the classic earnings quality test: profit that is not
-  // matched by cash is accrual, and a high accrual share reverses.
   const ni = f(d, "netIncome");
   const ops = f(d, "cashFromOps");
   if (ni !== null && ops !== null && ni !== 0) {
@@ -1301,8 +1189,6 @@ const qualityOfEarnings: SeatFn = (d, e, prior) => {
     );
   }
 
-  // Share-based compensation is a real cost excluded from most adjusted
-  // measures, so it is quantified rather than argued about.
   const sbc = f(d, "shareComp");
   if (sbc !== null && ni !== null && ni !== 0) {
     const ofNi = (sbc / Math.abs(ni)) * 100;
@@ -1345,10 +1231,6 @@ const qualityOfEarnings: SeatFn = (d, e, prior) => {
     "high",
   );
 };
-
-/* ================================================================== *
- * 04 Operational
- * ================================================================== */
 
 const operations: SeatFn = (d, e) => {
   const rev = f(d, "revenue");
@@ -1643,10 +1525,6 @@ const efficiency: SeatFn = (d, e) => {
   );
 };
 
-/* ================================================================== *
- * 05 Legal, regulatory and tax
- * ================================================================== */
-
 const legalStructure: SeatFn = (d, e) => {
   const equity = bal(d, "equity");
   const debt = (bal(d, "debt") ?? 0) + (bal(d, "debtCurrent") ?? 0);
@@ -1737,8 +1615,6 @@ const contracts: SeatFn = (d, e) => {
   if (commitments !== null) items.push(`purchase obligations of ${usd(commitments)}`);
 
   if (items.length === 0) {
-    // Where no contracted balance is tagged, receivables and unbilled work are
-    // still evidence of contracted activity and are usually published.
     const unbilledBal = bal(d, "unbilled");
     const receivables = bal(d, "receivables");
     if (unbilledBal !== null || receivables !== null) {
@@ -1996,10 +1872,6 @@ const tax: SeatFn = (d, e) => {
   );
 };
 
-/* ================================================================== *
- * 06 People and culture
- * ================================================================== */
-
 const management: SeatFn = (d, e) => {
   const directors = sect(d, "directors");
   const sbc = f(d, "shareComp");
@@ -2156,8 +2028,6 @@ const compensation: SeatFn = (d, e) => {
   const rev = f(d, "revenue");
 
   if (sbc === null) {
-    // Employee cost is published by most non-registrants even where an equity
-    // charge is not, and it is the larger number of the two.
     const cost = irMetric(d, [/^employee cost$/i, /^employee benefit expense/i, /^personnel (cost|expense)/i, /^staff cost/i]);
     if (cost && cost.values.length > 0 && rev !== null) {
       const latest = cost.values[cost.values.length - 1];
@@ -2217,8 +2087,6 @@ const compensation: SeatFn = (d, e) => {
 };
 
 const culture: SeatFn = (d, e) => {
-  // Where the subject publishes attrition, it is the single best cultural
-  // measure available anywhere, because it is behaviour rather than opinion.
   const attrition = irMetric(d, [/attrition/i, /turnover.*employee/i, /employee.*turnover/i]);
   let said = false;
 
@@ -2358,10 +2226,6 @@ const keyPerson: SeatFn = (d, e) => {
     "high",
   );
 };
-
-/* ================================================================== *
- * 07 ESG and sustainability
- * ================================================================== */
 
 const esgRisk: SeatFn = (d, e) => {
   const headings = d.filing?.riskHeadings ?? [];
@@ -2556,10 +2420,6 @@ const esgGovernance: SeatFn = (d, e) => {
   }
 };
 
-/* ================================================================== *
- * 08 Synthesis and decision
- * ================================================================== */
-
 const valuation: SeatFn = (d, e) => {
   const rev = f(d, "revenue");
   const ni = f(d, "netIncome");
@@ -2575,9 +2435,6 @@ const valuation: SeatFn = (d, e) => {
 
   const ebitda = op !== null ? op + (dep ?? 0) : null;
 
-  // A traded reference where one is available, and the fundamentals that
-  // anchor a range where it is not. The quote feed refuses shared hosting, so
-  // the fundamentals path is the one that has to carry this agent.
   if (d.quote) {
     const q = d.quote;
     const mcap = shares !== null ? q.price * shares : null;
@@ -2717,14 +2574,6 @@ const dealStructure: SeatFn = (d, e) => {
   );
 };
 
-/**
- * Measures that describe the company and must therefore agree wherever two
- * agents state them. Counts that are local to an agent, such as how many
- * disclosures it matched, are deliberately excluded: two agents reporting a
- * different number of disclosures are not in conflict, they searched for
- * different things, and flagging that as a contradiction trains the reader to
- * ignore this agent.
- */
 const CANONICAL_METRICS = new Set([
   "Revenue",
   "Operating margin",
@@ -2919,10 +2768,6 @@ const memo: SeatFn = (d, e, prior) => {
     "high",
   );
 };
-
-/* ================================================================== *
- * 09 Portfolio monitoring
- * ================================================================== */
 
 const kpiIntake: SeatFn = (d, e) => {
   const q = d.facts?.series.revenue?.quarterly ?? [];
@@ -3168,20 +3013,6 @@ const letter: SeatFn = (d, e, prior) => {
   );
 };
 
-
-/* ================================================================== *
- * Scope reporting
- * ================================================================== */
-
-/**
- * The concepts each agent's question depends on.
- *
- * Used only when an agent found none of them. Reporting which specific
- * measures were looked for, and which the issuer does publish instead, is a
- * factual answer to "what did this agent do". It is the opposite of the
- * generic restatement it replaces: the list differs by agent and the values
- * differ by company, and a reader can act on it.
- */
 const AGENT_CONCEPTS: Record<string, FactKey[]> = {
   explain: ["revenue", "operatingIncome", "netIncome"],
   screen: ["revenue"],
@@ -3265,14 +3096,6 @@ const CONCEPT_NAME: Partial<Record<FactKey, string>> = {
   assets: "total assets",
 };
 
-/**
- * States what an agent looked for and what the issuer publishes instead.
- *
- * Called only when an agent produced nothing. It is not a conclusion and does
- * not pretend to be one; it is an inventory, so the reader can see the question
- * was asked and can tell at a glance whether the missing measure is worth
- * chasing for this particular subject.
- */
 export function scopeReport(
   agentId: string,
   agentName: string,
@@ -3314,10 +3137,6 @@ export function scopeReport(
     { label: "Measures sought", value: String(names.length) },
   );
 }
-
-/* ================================================================== *
- * Registry
- * ================================================================== */
 
 export const SEATS: Record<string, SeatFn> = {
   search,

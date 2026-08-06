@@ -3,10 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/**
- * Masthead navigation, to the measurements ey.com ships: one-rem bold links on
- * the charcoal bar with the yellow underline carrying the active state.
- */
 const LINKS = [
   { href: "/", label: "Sector signal" },
   { href: "/dashboard/financials", label: "Quarterly P&L" },

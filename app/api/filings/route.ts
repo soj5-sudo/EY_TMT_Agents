@@ -5,13 +5,6 @@ import { BASELINE_SOURCE } from "@/lib/data/tcs-baseline";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/**
- * The live filing parse.
- *
- * Returns the parsed structures alongside a confidence score, so the client can
- * decide between the parsed values and the checked-in baseline rather than
- * having that decision made silently for it.
- */
 export async function GET() {
   try {
     const result = await getLatestFactSheet();
@@ -25,8 +18,6 @@ export async function GET() {
         verticals: result.data.verticals,
         meta: result.data.meta,
         confidence,
-        // The raw lines are large. Only the ones carrying figures are
-        // returned, and only enough for the retrieval index.
         lines: result.data.lines.filter(
           (l) => l.trim().length > 30 && /\d/.test(l),
         ).slice(0, 160),

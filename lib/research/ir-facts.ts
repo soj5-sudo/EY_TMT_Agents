@@ -1,28 +1,7 @@
-/**
- * Published metrics as a fact ledger.
- *
- * A company outside the SEC register publishes the same substance a registrant
- * files, but as labelled rows in its own workbook rather than as tagged
- * concepts. Every agent in a run reads the ledger, so without a bridge the
- * whole non-registrant cohort arrives at the financial workstreams with
- * nothing, and two thirds of the review reports that it is waiting for
- * documents that are in fact already downloaded.
- *
- * This maps the published rows onto the same concept keys, orders the periods
- * properly, and converts to US dollars at a live rate where the sheet states a
- * currency. Where the sheet does not state its units, the figure is left out
- * rather than assumed: a revenue line silently read in rupees as though it were
- * dollars is off by two orders of magnitude and looks entirely reasonable.
- */
-
 import type { FactKey, FactLedger, FactSeries, FactValue } from "@/lib/research/facts";
 import type { IrMetric, IrScrapeResult } from "@/lib/research/ir-scrape";
 import type { FxTable } from "@/lib/feeds/fx";
 import { nowIso } from "@/lib/core/types";
-
-/* ------------------------------------------------------------------ *
- * Periods
- * ------------------------------------------------------------------ */
 
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
@@ -30,11 +9,8 @@ const MONTHS: Record<string, number> = {
 };
 
 export interface ParsedPeriod {
-  /** Calendar year the period ends in. */
   year: number;
-  /** 1 to 4 for a quarter, null for a full year. */
   quarter: number | null;
-  /** Sortable key, ascending in time. */
   key: number;
   label: string;
 }
@@ -42,18 +18,9 @@ export interface ParsedPeriod {
 function fullYear(raw: string): number {
   const n = Number(raw);
   if (raw.length === 4) return n;
-  // A two digit fiscal year in this dataset is always the current century.
   return 2000 + n;
 }
 
-/**
- * Reads the period a published column header names.
- *
- * Headers arrive in several shapes across publishers: "1Q26", "Q1 FY27",
- * "FY26", "Mar-26". They have to be comparable to each other because the
- * latest period is what every agent reads, and picking the wrong one silently
- * reports a figure from two years ago as current.
- */
 export function parsePeriod(label: string): ParsedPeriod | null {
   const s = label.trim();
 
@@ -72,7 +39,6 @@ export function parsePeriod(label: string): ParsedPeriod | null {
   m = s.match(/^FY\s?(\d{2,4})$/i);
   if (m) {
     const year = fullYear(m[1]);
-    // A full year sorts after every quarter of that year.
     return { year, quarter: null, key: year * 10 + 5, label: s };
   }
 
@@ -95,24 +61,12 @@ export function parsePeriod(label: string): ParsedPeriod | null {
   return null;
 }
 
-/** Approximate period end, needed because the ledger keys on end dates. */
 function periodEnd(p: ParsedPeriod): string {
   const month = p.quarter === null ? 12 : p.quarter * 3;
   const day = [4, 6, 9, 11].includes(month) ? 30 : month === 2 ? 28 : 31;
   return `${p.year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-/* ------------------------------------------------------------------ *
- * Label mapping
- * ------------------------------------------------------------------ */
-
-/**
- * Published row labels that carry each concept, most specific first.
- *
- * Matching is deliberately tight. A loose pattern for revenue picks up
- * "Deferred revenue" and "Revenue per employee" and puts a balance or a ratio
- * where an income figure belongs, and nothing downstream can detect that.
- */
 const LABEL_MAP: Array<[FactKey, RegExp[]]> = [
   ["revenue", [
     /^revenue$/i,
@@ -203,10 +157,6 @@ const CONCEPT_LABEL: Partial<Record<FactKey, string>> = {
   employees: "Employees",
 };
 
-/**
- * Concepts that are a position at a moment rather than an amount accumulated
- * over a period. Balance sheet lines and headcount; everything else is a flow.
- */
 const STOCK_KEYS = new Set<FactKey>([
   "cash", "receivables", "unbilled", "payables", "inventory", "deferredRevenue",
   "assets", "currentAssets", "currentLiabilities", "equity", "debt", "debtCurrent",
@@ -214,19 +164,10 @@ const STOCK_KEYS = new Set<FactKey>([
   "orderBook", "employees", "unrecognisedTax", "lossContingency", "purchaseCommitments",
 ]);
 
-/**
- * Rows whose values are already ratios and must not be scaled or converted.
- *
- * The word boundaries matter more than they look. Without them "ratio" matches
- * inside "Operations", so every row named "Revenue from Operations" is
- * classified as a ratio and silently dropped, and the issuer appears to publish
- * no revenue at all.
- */
 const RATIO_ROW = /\bmargin\b|%|\bpercent\b|\bratio\b|\bper share\b|\battrition\b|\butilis|\butiliz|\brate\b/i;
 
 function matchKey(label: string): FactKey | null {
   const clean = label
-    // Published statements number their lines: "1 Gross Revenue", "(a) Cash".
     .replace(/^\s*\(?[0-9ivx]{1,4}\)?[.)]?\s+/i, "")
     .replace(/\*+$/, "")
     .replace(/\s*\(.*?\)\s*$/, "")
@@ -239,32 +180,15 @@ function matchKey(label: string): FactKey | null {
   return null;
 }
 
-/* ------------------------------------------------------------------ *
- * Build
- * ------------------------------------------------------------------ */
-
 export interface IrLedgerResult {
   ledger: FactLedger;
-  /** Currency the source figures were stated in, before conversion. */
   sourceCurrency: string | null;
-  /** Rate applied, and the fixing date it came from. */
   rate: number | null;
   rateDate: string | null;
-  /** Concepts that were mapped, for reporting what the bridge actually did. */
   mapped: FactKey[];
-  /** Rows carrying figures whose units the sheet never stated. */
   droppedForUnknownUnits: number;
 }
 
-/**
- * Builds a ledger from published rows.
- *
- * `declaredCurrency` is the fallback when a sheet omits its caption: it comes
- * from the coverage universe, which records what each company reports in. It is
- * used only when the sheet itself is silent, because the sheet is the better
- * authority and several publishers issue both a dollar and a local sheet in one
- * workbook.
- */
 export function buildLedgerFromIr(
   scrape: IrScrapeResult,
   fx: FxTable | null,
@@ -276,17 +200,8 @@ export function buildLedgerFromIr(
   let sourceCurrency: string | null = null;
   let rate: number | null = null;
 
-  // One metric per concept: the first row whose label matches, since the
-  // scraper already ordered files best first.
   const claimed = new Set<FactKey>();
 
-  // A ledger has to be internally consistent before it is large. Publishers
-  // issue a dollar sheet beside a rupee one, and rows picked freely across
-  // both put a rupee numerator over a dollar denominator: Persistent's margin
-  // came out at nought point nought percent from an EBIT in rupees divided by
-  // a revenue in dollars, and both figures were individually correct. So one
-  // currency is chosen, the one carrying revenue, and money rows stated in any
-  // other are left out. Counts are exempt because they are not money.
   const currencyVotes = new Map<string, { count: number; hasRevenue: boolean }>();
   for (const m of scrape.metrics) {
     const k = matchKey(m.label);
@@ -302,11 +217,7 @@ export function buildLedgerFromIr(
   const chosenCurrency =
     [...currencyVotes.entries()]
       .sort((a, b) => {
-        // Only a currency that carries revenue can anchor the ledger, since
-        // every ratio is taken against it.
         if (a[1].hasRevenue !== b[1].hasRevenue) return a[1].hasRevenue ? -1 : 1;
-        // Among those, the publisher's own dollar sheet is preferred: it needs
-        // no conversion, so nothing rests on a rate fixed on a later date.
         const aUsd = a[0] === "USD";
         const bUsd = b[0] === "USD";
         if (aUsd !== bUsd) return aUsd ? -1 : 1;
@@ -314,10 +225,6 @@ export function buildLedgerFromIr(
       })
       .at(0)?.[0] ?? null;
 
-  // Rows outside the chosen currency are removed before anything claims a
-  // concept. Filtering afterwards lets a row take the revenue slot and then be
-  // dropped, which leaves the ledger with no revenue at all and every ratio
-  // built on it silently absent.
   const eligible = scrape.metrics.filter((m) => {
     const k = matchKey(m.label);
     if (k === "employees") return true;
@@ -333,19 +240,11 @@ export function buildLedgerFromIr(
     const currency = metric.unit?.currency ?? declaredCurrency;
     const scale = metric.unit?.scale ?? 1;
 
-    // Without a currency the figure cannot be placed on a dollar ledger at all.
     if (!currency && key !== "employees") {
       dropped++;
       continue;
     }
 
-    // A stated scale is not optional for an absolute figure. Results releases
-    // laid out as prose often carry no caption, and defaulting to units turns
-    // a number published in crore into one that reads as rupees: HCLTech's
-    // revenue arrived as a hundred million dollars against an actual thirteen
-    // billion, and nothing downstream can detect an error of that shape.
-    // Ratios are unaffected because the scale cancels, so they are left to the
-    // agents that compute them from two rows on the same basis.
     if (metric.unit && !metric.unit.scaleStated && key !== "employees") {
       dropped++;
       continue;
@@ -355,19 +254,11 @@ export function buildLedgerFromIr(
       continue;
     }
 
-    // A caption in a spreadsheet governs the table under it. In a results
-    // release laid out as prose there is no table structure, so a caption seen
-    // earlier in the document may belong to something else entirely, and the
-    // row is only trusted when its own label carries the units.
     if (metric.structured === false && !metric.unitFromLabel && key !== "employees") {
       dropped++;
       continue;
     }
 
-    // Headcount is a count of people. Scaling it by the sheet's money units and
-    // dividing it by an exchange rate turns thirteen thousand employees into
-    // one point three billion, which is obviously wrong on sight and would not
-    // be obvious at all inside a ratio.
     const isCount = key === "employees";
 
     let factor = isCount ? 1 : scale;
@@ -404,12 +295,6 @@ export function buildLedgerFromIr(
     const annualPts = points.filter((x) => x.p.quarter === null).map(toValue);
     const quarterlyPts = points.filter((x) => x.p.quarter !== null).map(toValue);
 
-    // Where only quarters are published, the trailing four are combined into a
-    // year so the annual reads every agent makes have something to stand on.
-    // How they combine depends on what the concept is: a flow accumulates over
-    // the year, a stock is a position at a moment and the year end value is
-    // simply the last one. Summing a headcount across four quarters reports an
-    // organisation four times its actual size, and the figure looks ordinary.
     let annual = annualPts;
     if (annual.length === 0 && quarterlyPts.length >= 4) {
       const grouped = new Map<number, FactValue[]>();

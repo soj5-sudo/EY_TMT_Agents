@@ -4,15 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Citation } from "@/lib/rag/answer";
 import { apiFetch } from "@/lib/client/api";
 
-/**
- * Analyst assistant.
- *
- * Answers from the console's own corpus only: the three dashboards, the parsed
- * filings, the live feeds and the product documentation. Citations are rendered
- * under every answer, and any passage that came from a third party is flagged
- * so the reader knows the difference between a filed figure and a headline.
- */
-
 interface Turn {
   id: string;
   role: "user" | "assistant";

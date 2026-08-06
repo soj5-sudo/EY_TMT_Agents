@@ -20,21 +20,6 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 const SECTORS = ["Technology", "Media", "Telecom", "Cross-sector"] as const;
 
-/**
- * Coverage list.
- *
- * The publisher tier is the quiet part: it sits in the row as a small mark and
- * only becomes a filter when the reader asks for it. Analysts want to know a
- * claim came from a wire rather than a trade blog without the page shouting
- * about provenance on every line.
- *
- * The filters above it are the loud part, because a coverage feed is only
- * useful if a reader can get to the four stories about one company in a set of
- * two hundred. Every control narrows the same set and they compose, so sector
- * plus company plus a search term is a valid question rather than three
- * competing ones. Counts are computed against the other active filters, so a
- * chip never offers a selection that would return nothing.
- */
 export function SourceList({
   items,
   limit = 40,
@@ -49,10 +34,6 @@ export function SourceList({
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
 
-  // The feed is a fixed set of standing queries, so a company outside them has
-  // no coverage in it and filtering the fetched set returns nothing while the
-  // open web returns plenty. A typed term is therefore also sent as a live
-  // search, and what comes back is merged in.
   const [live, setLive] = useState<NewsItem[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchNote, setSearchNote] = useState<string | null>(null);
@@ -88,9 +69,6 @@ export function SourceList({
     };
   }, [query, runSearch]);
 
-  // Newest first. A coverage feed that is not in date order reads as a pile.
-  // Live results first, then the loaded feed, deduplicated on the headline so a
-  // story present in both appears once.
   const merged = useMemo(() => {
     const seen = new Set<string>();
     const out: NewsItem[] = [];
@@ -128,7 +106,6 @@ export function SourceList({
 
   const filtered = useMemo(() => ordered.filter((i) => matches(i)), [ordered, matches]);
 
-  /** Counts for one dimension, computed with that dimension's own filter off. */
   const countBy = useMemo(() => {
     const sectors = new Map<string, number>();
     const categories = new Map<string, number>();

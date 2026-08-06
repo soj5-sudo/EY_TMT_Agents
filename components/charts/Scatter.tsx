@@ -10,16 +10,6 @@ import {
   useTooltip,
 } from "./kit";
 
-/**
- * Share against growth, drawn as a quadrant.
- *
- * The single most useful view of a segment portfolio: a large segment growing
- * slowly is a different problem from a small one shrinking fast, and a table
- * sorted by either column hides the pairing. Quadrant boundaries are the
- * portfolio's own weighted average growth and the mean segment share, so the
- * split reflects this business rather than an arbitrary threshold.
- */
-
 export interface ScatterPoint {
   label: string;
   share: number;
@@ -71,7 +61,6 @@ export function ScatterQuadrant({
   const x = linearScale(xDomain, [m.left, m.left + plotW]);
   const y = linearScale(yDomain, [m.top + plotH, m.top]);
 
-  // Weighted average growth: the portfolio's own centre of gravity.
   const totalShare = points.reduce((s, p) => s + p.share, 0);
   const weightedGrowth =
     points.reduce((s, p) => s + p.growth * p.share, 0) / (totalShare || 1);
@@ -103,7 +92,7 @@ export function ScatterQuadrant({
           ))}
         </g>
 
-        {/* Quadrant dividers. */}
+        { }
         <line
           x1={m.left}
           x2={m.left + plotW}
@@ -156,7 +145,6 @@ export function ScatterQuadrant({
 
         {points.map((p) => {
           const isActive = active === p.label;
-          // Radius encodes share so the eye is drawn to what matters most.
           const r = 5 + Math.sqrt(p.share) * 1.9;
           return (
             <g key={p.label}>
@@ -246,16 +234,6 @@ export function ScatterQuadrant({
   );
 }
 
-/**
- * Positioning plot.
- *
- * Scale against profitability, the pairing a peer set exists to show: the same
- * margin means something different at two hundred million of revenue than at
- * eight billion, and two sorted columns never make that visible. No quadrant
- * lines here, because a peer universe drawn from mixed reporting periods has no
- * average worth ruling a line through.
- */
-
 export interface PositionPoint {
   label: string;
   x: number;
@@ -266,12 +244,6 @@ export interface PositionPoint {
 
 const LABEL_LIMIT = 12;
 
-/**
- * padDomain widens a domain of one value, which is what a single point or a
- * column of identical figures produces, so the scale span is never zero. The
- * clamp keeps the padding from carrying an axis below zero when nothing
- * reported is negative: a revenue axis starting under zero invents peers.
- */
 function axisDomain(values: number[]): [number, number] {
   const lo = Math.min(...values);
   const hi = Math.max(...values);
@@ -324,11 +296,8 @@ export function Scatter({
   const xTicks = [xDomain[0], (xDomain[0] + xDomain[1]) / 2, xDomain[1]];
   const yTicks = [yDomain[0], (yDomain[0] + yDomain[1]) / 2, yDomain[1]];
 
-  // Past a dozen points the labels overlap into noise, so only the selection
-  // keeps its name and the rest are read by hovering.
   const named = plotted.length < LABEL_LIMIT;
 
-  // Selected dots are drawn last so nothing is painted over them.
   const ordered = [...plotted].sort(
     (a, b) => Number(a.highlight ?? false) - Number(b.highlight ?? false),
   );

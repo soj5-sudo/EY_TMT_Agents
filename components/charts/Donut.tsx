@@ -3,15 +3,6 @@
 import { useState } from "react";
 import { SERIES_COLORS, useTooltip } from "./kit";
 
-/**
- * Composition ring.
- *
- * A ring rather than a filled pie: the hole carries the total, which is the
- * number a reader wants alongside the split, and comparing arc lengths is
- * easier without a centre wedge competing for attention. Slices below a
- * threshold are pooled so the ring never degenerates into unreadable slivers.
- */
-
 export interface Slice {
   label: string;
   value: number;
@@ -55,7 +46,6 @@ export function Donut({
     );
   }
 
-  // Pool the tail so the ring stays legible.
   const sorted = [...positive].sort((a, b) => b.value - a.value);
   const major = sorted.filter((s) => s.value / sum >= 0.02);
   const minor = sorted.filter((s) => s.value / sum < 0.02);

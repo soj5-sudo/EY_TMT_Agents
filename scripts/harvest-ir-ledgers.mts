@@ -1,27 +1,3 @@
-/**
- * Harvests the published results files into a checked-in snapshot.
- *
- * Run with:
- *   npm run harvest:ir
- *
- * Why this exists. Several investor relations hosts serve their files to an
- * ordinary connection and refuse a data centre one. The refusal is by network
- * rather than by request: the same URL with the same headers returns the file
- * from a home connection and nothing from a hosting provider. So the console
- * running in production cannot always reach documents it can read perfectly
- * well from a laptop, and the companies concerned lose their working capital
- * and balance sheet measures for no reason a reader would accept.
- *
- * The snapshot closes that. Production still tries the live fetch first and
- * uses it whenever it succeeds; the snapshot is what it falls back to instead
- * of falling back to nothing. Every figure in it was scraped from the company's
- * own published file, and it carries the date it was taken so the interface can
- * say so rather than implying the number arrived this morning.
- *
- * The workflow in .github/workflows refreshes this on a schedule and commits
- * the result, which is itself a deploy.
- */
-
 import { writeFileSync } from "node:fs";
 import { IR_INDEXES, scrapeIr } from "@/lib/research/ir-scrape";
 import { buildLedgerFromIr } from "@/lib/research/ir-facts";

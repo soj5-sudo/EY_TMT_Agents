@@ -1,16 +1,3 @@
-/**
- * Private document ingestion.
- *
- * Stateless by design. A file is parsed in the request that carries it and the
- * result is returned to the caller; the server keeps nothing. The browser holds
- * the parsed document and sends it back with the next research call.
- *
- * This is what makes the feature correct on serverless, where two requests from
- * the same user routinely land on different instances and any process-local
- * store silently loses the upload. It also means confidential material is never
- * written to disk and never outlives the request that carried it.
- */
-
 import { randomUUID } from "node:crypto";
 import { extractPdfText, PdfParseError } from "@/lib/pdf/extract";
 import { xlsxText, XlsxError } from "@/lib/research/xlsx";
@@ -22,7 +9,6 @@ const MAX_TOTAL_CHARS = 900_000;
 
 export class DocumentError extends Error {}
 
-/** Figures worth surfacing from a private pack. */
 const PATTERNS: Array<{ label: string; re: RegExp }> = [
   { label: "Revenue", re: /\brevenue[^.\n]{0,40}?([$₹€£]?\s?[\d,]+(?:\.\d+)?\s?(?:mn|m|bn|billion|million|crore|lakh|k)?)/gi },
   { label: "EBITDA", re: /\bebitda[^.\n]{0,40}?([$₹€£]?\s?[\d,]+(?:\.\d+)?\s?(?:mn|m|bn|billion|million|crore|%)?)/gi },
@@ -130,12 +116,6 @@ export async function ingest(file: File): Promise<IngestedDocument> {
   return doc;
 }
 
-/**
- * Validates documents posted back by the browser.
- *
- * Anything arriving from a client is untrusted, including material this server
- * produced a moment earlier. Shape, length and count are all re-checked.
- */
 export function acceptDocuments(raw: unknown): IngestedDocument[] {
   if (!Array.isArray(raw)) return [];
 

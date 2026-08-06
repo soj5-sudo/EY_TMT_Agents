@@ -8,20 +8,6 @@ import { nowIso, type Provenance } from "@/lib/core/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/**
- * Where one company stands.
- *
- * The question behind a pitch is never what a company's margin is, it is
- * whether that margin is good, and that is only answerable against a stated
- * comparison set. This puts the subject against its cohort on every measure the
- * console can compute: the level, the cohort median, the rank, and the distance
- * to the best and worst name in the set.
- *
- * The cohort is named in the response rather than assumed, because a
- * percentile is only as honest as the set behind it, and a reader has to be
- * able to object to the peer group before they can accept the position.
- */
-
 const TTL_MS = 60 * 60 * 1000;
 
 export interface BenchmarkMeasure {
@@ -31,18 +17,13 @@ export interface BenchmarkMeasure {
   betterHigh: boolean | null;
   subject: number | null;
   period: string | null;
-  /** Subject's own history, so position is read with direction. */
   points: Array<{ label: string; value: number }>;
   cohortMedian: number | null;
   best: { short: string; value: number } | null;
   worst: { short: string; value: number } | null;
-  /** 1 is the strongest on this measure. Null when direction is not a
-   *  judgement, or when the subject does not report it. */
   rank: number | null;
   ranked: number;
-  /** Share of the cohort the subject is at or ahead of, 0 to 100. */
   percentile: number | null;
-  /** Every name that reports this measure, for the distribution strip. */
   cohort: Array<{ short: string; value: number; isSubject: boolean }>;
 }
 
@@ -77,8 +58,6 @@ export async function GET(request: Request) {
     );
   }
 
-  // The comparison set, stated so a reader can object to it before accepting
-  // any position derived from it.
   const cohort = UNIVERSE.filter((c) => {
     if (scope === "sector") {
       if (c.sector !== subject.sector) return false;
@@ -105,10 +84,6 @@ export async function GET(request: Request) {
     for (const { company, result } of ledgers) {
       const map = new Map<MetricKey, Array<{ label: string; value: number }>>();
       if (result?.ledger) {
-        // Companies outside the register publish quarters. Set beside a filer's
-        // full year, a quarter of revenue ranks the company near the bottom of
-        // its cohort for no reason connected to its size, so flows and growth
-        // rates are put on an annual footing before anything is ranked.
         const ppy = ledgerPeriodsPerYear(result.ledger);
         for (const m of METRICS) {
           const points = seriesFor(result.ledger, m.key);
@@ -185,7 +160,6 @@ export async function GET(request: Request) {
 
   const v = res.value;
 
-  // A one line reading of the position, computed rather than written.
   const ranked = v.measures.filter((m) => m.rank !== null && m.ranked >= 3);
   const leading = ranked.filter((m) => m.rank === 1);
   const topQuartile = ranked.filter((m) => (m.percentile ?? 0) >= 75);

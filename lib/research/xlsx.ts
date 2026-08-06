@@ -1,17 +1,3 @@
-/**
- * Minimal XLSX text extraction, zero dependencies.
- *
- * An xlsx file is a ZIP of XML parts. This walks the central directory,
- * inflates the shared-strings table and each worksheet, and joins cell values
- * into pipe-separated rows so the figure extractor can read them like any
- * other document. Formulas are ignored; the cached value in <v> is what the
- * sheet displayed, which is the number an analyst means.
- *
- * Scope: methods 0 (stored) and 8 (deflate), which covers every xlsx a
- * spreadsheet application writes. Encrypted workbooks are rejected with a
- * clear message rather than mis-parsed.
- */
-
 import zlib from "node:zlib";
 
 const EOCD = 0x06054b50;
@@ -44,7 +30,6 @@ function decodeEntities(s: string): string {
 }
 
 function entries(b: Buffer): Entry[] {
-  // End-of-central-directory sits within 64 KB of the file end.
   let at = -1;
   const floor = Math.max(0, b.length - 22 - 65536);
   for (let i = b.length - 22; i >= floor; i--) {
@@ -106,7 +91,6 @@ export function xlsxText(input: Uint8Array): { text: string; sheets: number } {
     throw new XlsxError("The workbook uses an unsupported compression method.");
   }
 
-  // Shared strings: <si> blocks, each holding one or more <t> runs.
   const shared: string[] = [];
   const ss = all.find((e) => e.name === "xl/sharedStrings.xml");
   if (ss) {

@@ -14,11 +14,6 @@ export interface ClientDocument {
 
 const MAX_DOCS = 12;
 
-/**
- * Parsed documents live in component state and nowhere else. The server keeps
- * nothing, no web storage is written, and a refresh or tab close removes them
- * permanently. That is the retention policy, implemented by not retaining.
- */
 export function useDocuments() {
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
 

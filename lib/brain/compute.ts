@@ -1,16 +1,3 @@
-/**
- * Layer 2: compute.
- *
- * Resolves a parsed question against the statement model and returns numbers,
- * not passages. This is what separates the assistant from a search box: asked
- * for NVIDIA's operating margin it computes the ratio from the filed statement
- * for the period where both lines exist, rather than finding a sentence that
- * mentions margins.
- *
- * Every value carries the period it covers and the source it came from, and a
- * measure the filer does not report returns null rather than a guess.
- */
-
 import { annualRatios, getStatements } from "@/lib/financials/model";
 import { resolveCik } from "@/lib/feeds/sec";
 import { getIrHistory } from "@/lib/feeds/ir";
@@ -23,12 +10,9 @@ export interface MetricValue {
   company: Company;
   metric: MetricDef;
   value: number | null;
-  /** Reporting period the value covers. */
   period: string | null;
-  /** Plain reading of what the number indicates, from the statement model. */
   reading: string | null;
   provenance: Provenance | null;
-  /** Set when the measure could not be produced, explaining why. */
   unavailable: string | null;
 }
 
@@ -41,14 +25,12 @@ export interface TrendResult {
   company: Company;
   metric: MetricDef;
   points: TrendPoint[];
-  /** Compound annual rate where the span supports one. */
   cagrPct: number | null;
   spanYears: number | null;
   provenance: Provenance | null;
   unavailable: string | null;
 }
 
-/** Ratio labels in the statement model, keyed by our metric vocabulary. */
 const RATIO_LABEL: Partial<Record<MetricKey, string>> = {
   grossMargin: "Gross margin",
   operatingMargin: "Operating margin",
@@ -60,10 +42,6 @@ const RATIO_LABEL: Partial<Record<MetricKey, string>> = {
   returnOnEquity: "Return on equity",
   shareBasedComp: "Share-based comp",
 };
-
-/* ---------------------------------------------------------------- *
- * Single company, single measure
- * ---------------------------------------------------------------- */
 
 export async function computeMetric(
   company: Company,
@@ -79,7 +57,6 @@ export async function computeMetric(
     unavailable: null,
   };
 
-  // Companies outside the SEC register report through their own documents.
   if (!company.secFiler) {
     return computeFromIr(company, metric, base);
   }
@@ -152,16 +129,11 @@ export async function computeMetric(
   };
 }
 
-/** Measures for companies that publish through investor relations. */
 async function computeFromIr(
   company: Company,
   metric: MetricDef,
   base: MetricValue,
 ): Promise<MetricValue> {
-  // The scraped results files carry far more than the fact sheets do, so the
-  // ledger is tried first and the fact sheet is the fallback. Without this a
-  // company outside the register could be asked only five of the thirteen
-  // measures the console knows, purely because of where it is listed.
   const fromLedger = await ledgerFor(company).catch(() => null);
   if (fromLedger?.ledger) {
     const series = seriesFor(fromLedger.ledger, metric.key);
@@ -241,20 +213,6 @@ async function computeFromIr(
   };
 }
 
-/* ---------------------------------------------------------------- *
- * Trend
- * ---------------------------------------------------------------- */
-
-
-/**
- * One measure for one reported year.
- *
- * The same arithmetic as annualRatios, applied to any year rather than only
- * the latest, so a trend can be drawn for every measure the console can state
- * a level for. Keeping it in one place is what stops the two diverging, which
- * would produce a chart whose last point disagrees with the headline figure
- * printed above it.
- */
 function metricAtYear(
   key: MetricKey,
   at: (line: string, end: string) => number | null,
@@ -262,7 +220,6 @@ function metricAtYear(
   revenue: number,
   priorRevenue: number | null,
 ): number | null {
-  // A denominator near zero yields a correct division that means nothing.
   const usable = (d: number | null) =>
     d !== null && Number.isFinite(d) && d !== 0 && Math.abs(d) >= Math.abs(revenue) * 0.02;
 
@@ -312,9 +269,6 @@ function metricAtYear(
     case "returnOnEquity":
       return over(at("netIncome", end), at("equity", end), 100);
 
-    // Headcount and attrition are not tagged concepts on the domestic forms.
-    // They are published by companies that report outside the register, and
-    // the branch above reads them from there.
     case "headcount":
     case "attrition":
       return null;
@@ -432,10 +386,6 @@ export async function computeTrend(
   return { ...base, points, cagrPct: cagr, spanYears: span, provenance: statements.provenance };
 }
 
-/* ---------------------------------------------------------------- *
- * Cohort ranking
- * ---------------------------------------------------------------- */
-
 export async function computeRanking(
   cohort: Company[],
   metric: MetricDef,
@@ -446,7 +396,6 @@ export async function computeRanking(
     try {
       out.push(await computeMetric(c, metric));
     } catch {
-      // A single unresolvable name must not fail the ranking.
     }
     await new Promise((r) => setTimeout(r, 120));
   }

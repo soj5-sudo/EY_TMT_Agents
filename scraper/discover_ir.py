@@ -1,23 +1,3 @@
-"""
-Renders every investor relations index and writes down the files it exposes.
-
-This does one job: turn an index page into a list of document URLs. It renders
-the page because several of these sites build their file list in the browser,
-so a plain request returns a shell with no link in it and the company appears
-to publish nothing.
-
-It deliberately does not parse the documents. The TypeScript side already reads
-spreadsheets and PDFs, including encrypted ones and subset-font ones, and has
-been checked against every company in the universe. Splitting it this way means
-the figures on the dashboard come from one reader with one set of rules, and
-this file only ever contributes URLs.
-
-Run:
-    scraper/.venv/bin/python scraper/discover_ir.py
-
-Writes lib/data/ir-discovered.json, which the harvest reads.
-"""
-
 from __future__ import annotations
 
 import json
@@ -32,9 +12,6 @@ from scrapling.fetchers import DynamicFetcher, Fetcher
 REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "lib" / "data" / "ir-discovered.ts"
 
-# Index pages, per coverage symbol. Each was confirmed by hand to be the page
-# that actually lists the results files, which is often not the one the site
-# navigation calls "Investors".
 INDEXES: dict[str, list[str]] = {
     "TCS.NS": ["https://www.tcs.com/investor-relations/financial-statements"],
     "HCLTECH.NS": ["https://www.hcltech.com/investors/quarterly-results"],
@@ -63,7 +40,6 @@ INDEXES: dict[str, list[str]] = {
 
 FILE_RE = re.compile(r"\.(xlsx?|pdf)(?:$|\?)", re.I)
 
-# Filenames that are published beside the results and are never the results.
 NOISE_RE = re.compile(
     r"modern[-_ ]?slavery|policy|policies|code[-_ ]?of|charter|notice|intimation|"
     r"postal[-_ ]?ballot|scrutin|newspaper|advertis|agm|egm|dividend[-_ ]?payment|"
@@ -71,10 +47,8 @@ NOISE_RE = re.compile(
     re.I,
 )
 
-
 def score(url: str) -> int:
-    """How much a filename looks like a quarterly results document."""
-    name = url.rsplit("/", 1)[-1].lower()
+        name = url.rsplit("/", 1)[-1].lower()
     s = 0
     if re.search(r"\.xlsx?($|\?)", name):
         s += 60
@@ -95,7 +69,6 @@ def score(url: str) -> int:
         s -= 90
     return s
 
-
 def collect(page, base: str) -> set[str]:
     out: set[str] = set()
     for href in page.css("a::attr(href)").getall():
@@ -109,10 +82,8 @@ def collect(page, base: str) -> set[str]:
         out.add(absolute)
     return out
 
-
 def discover(url: str) -> tuple[set[str], str]:
-    """Plain first, rendered only when the plain page yields nothing useful."""
-    try:
+        try:
         plain = Fetcher.get(url, stealthy_headers=True, timeout=30)
         files = collect(plain, url)
         if any(score(f) > 0 for f in files):
@@ -128,7 +99,6 @@ def discover(url: str) -> tuple[set[str], str]:
     except Exception as exc:  # noqa: BLE001
         print(f"      rendered failed: {type(exc).__name__}: {str(exc)[:110]}")
         return files, "plain"
-
 
 def main() -> int:
     result: dict[str, dict] = {}
@@ -185,7 +155,6 @@ def main() -> int:
     covered = sum(1 for v in result.values() if v["files"])
     print(f"\nwrote {OUT.relative_to(REPO)}: {covered} of {len(INDEXES)} indexes, {total} files")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

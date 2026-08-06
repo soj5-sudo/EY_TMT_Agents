@@ -1,11 +1,3 @@
-/**
- * Investor relations document paths and parsing.
- *
- * Deliberately free of application imports so the same code runs inside the app
- * and inside scripts/harvest-ir.mts, which executes under bare Node. Duplicating
- * the parser for the generator would guarantee the two drift apart.
- */
-
 export interface IrDocRef {
   label: string;
   fiscalYear: string;
@@ -25,18 +17,9 @@ export interface IrQuarter {
   orderBookUsdBn: number | null;
   ccGrowthYoyPct: number | null;
   inrGrowthYoyPct: number | null;
-  /** Fraction of expected fields recovered. */
   confidence: number;
 }
 
-/* ---------------------------------------------------------------- *
- * Document paths
- * ---------------------------------------------------------------- */
-
-/**
- * Indian fiscal years run April to March. A quarter's fact sheet lands roughly
- * three to four weeks after the quarter closes.
- */
 function indianQuarters(now: Date, count: number): Array<{ fy: string; q: 1 | 2 | 3 | 4; label: string }> {
   const month = now.getUTCMonth();
   const year = now.getUTCFullYear();
@@ -92,10 +75,6 @@ export function irSourceFor(symbol: string): IrSource | null {
   return IR_SOURCES.find((s) => s.symbol === symbol) ?? null;
 }
 
-/* ---------------------------------------------------------------- *
- * Parsing
- * ---------------------------------------------------------------- */
-
 function num(raw: string | undefined): number | null {
   if (!raw) return null;
   const v = Number(raw.replace(/[,\s]/g, ""));
@@ -110,13 +89,6 @@ function firstMatch(lines: string[], re: RegExp): RegExpMatchArray | null {
   return null;
 }
 
-/**
- * Reads the headline block of a quarterly fact sheet.
- *
- * The currency glyph does not survive the subset-font mapping in these decks,
- * so the prefixes ("INR Revenue of", "USD Revenue of") are the anchors rather
- * than the symbol.
- */
 export function parseIrQuarter(lines: string[], ref: IrDocRef): IrQuarter {
   const inr = firstMatch(
     lines,

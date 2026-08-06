@@ -7,29 +7,12 @@ import type { Provenance } from "@/lib/core/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/**
- * Side by side comparison.
- *
- * Two companies on the same measure is the question a diligence reader asks
- * most often, and answering it by running the full research flow twice and
- * reading the two pages against each other is how transcription errors get
- * into a paper. This computes every measure for every requested name from the
- * same ledger, on the same basis, in one response.
- *
- * A measure is returned as its whole series rather than as a level, so the
- * comparison can show the trajectory as well as the current standing without a
- * second call, and so the level shown is always the last point of the series
- * beneath it.
- */
-
 const MAX_COMPANIES = 6;
 
 export interface CompareSeries {
   key: MetricKey;
   label: string;
   unit: string;
-  /** Higher is better, for the comparison to mark a leader. Null where the
-   *  direction is not a judgement. */
   betterHigh: boolean | null;
   points: Array<{ label: string; value: number }>;
   latest: number | null;
@@ -96,8 +79,6 @@ export async function GET(request: Request) {
     );
   }
 
-  // Ledgers are assembled together. Each is independently cached, so a repeat
-  // comparison costs nothing, and one company failing must not empty the panel.
   const companies: CompareCompany[] = await Promise.all(
     wanted.map(async (c): Promise<CompareCompany> => {
       const base: CompareCompany = {
@@ -119,9 +100,6 @@ export async function GET(request: Request) {
           return { ...base, provenance, unavailable: unavailable ?? c.coverageNote ?? null };
         }
 
-        // A company publishing quarters has its flows and growth put on an
-        // annual footing, or the column beside an annual filer understates it
-        // fourfold and reads as a real difference.
         const ppy = ledgerPeriodsPerYear(ledger);
 
         const measures: CompareSeries[] = [];
@@ -153,9 +131,6 @@ export async function GET(request: Request) {
     }),
   );
 
-  // The union of measures any company reports, so a row exists wherever at
-  // least one side has a figure and the gap on the other side is visible
-  // rather than silently dropped.
   const rows = METRICS.filter((m) =>
     companies.some((c) => c.measures.some((x) => x.key === m.key)),
   ).map((m) => ({

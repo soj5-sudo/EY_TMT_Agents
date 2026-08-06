@@ -7,7 +7,6 @@ import { sanitizeUserInput } from "@/lib/security/sanitize";
 export const dynamic = "force-dynamic";
 export const maxDuration = 240;
 
-/** SEC asks for no more than ten requests a second. This stays well inside it. */
 const SPACING_MS = 140;
 
 export async function GET(request: Request) {
@@ -23,8 +22,6 @@ export async function GET(request: Request) {
     );
   }
 
-  // Peers are the subsector cohort. Comparing an IT services margin against a
-  // semiconductor margin is arithmetic, not analysis.
   const cohort = UNIVERSE.filter(
     (c) => c.subsector === subject.subsector && c.secFiler,
   ).slice(0, 8);

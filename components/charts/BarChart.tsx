@@ -3,15 +3,6 @@
 import { useState } from "react";
 import { fmtSigned, useTooltip } from "./kit";
 
-/**
- * Horizontal share bar with a paired growth column.
- *
- * Built for revenue distribution, where the reader needs two things at once:
- * how big a segment is, and which direction it moved. A share bar alone hides
- * the second, and a growth chart alone hides the first, so both sit on one row
- * with the growth rendered as a signed bar off a centre line.
- */
-
 export interface DistributionRow {
   label: string;
   share: number;
@@ -175,7 +166,7 @@ function Row({
         {row.share.toFixed(1)}
       </span>
 
-      {/* Signed growth off a centre line. */}
+      { }
       <span style={cell} onMouseMove={onEnter} onMouseLeave={onLeave}>
         <span style={{ display: "block", position: "relative", height: 10 }}>
           <span

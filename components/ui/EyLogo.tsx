@@ -1,12 +1,5 @@
 import { useId } from "react";
 
-/**
- * EY lockup. Path data is the artwork served by ey.com, unmodified.
- * Rendered inline so the page requests no external asset and the content
- * security policy stays at 'self'.
- */
-
-/** Mark only: the beam and the letterforms. */
 export function EyLogo({
   height = 34,
   tone = "light",
@@ -39,7 +32,6 @@ export function EyLogo({
   );
 }
 
-/** Full lockup including the strapline, as it appears on ey.com. */
 export function EyLockup({
   height = 44,
   tone = "light",

@@ -1,17 +1,3 @@
-/**
- * Investor relations harvester.
- *
- * Covers the companies that do not file with the SEC. Indian IT majors publish
- * a quarterly fact sheet on a predictable content path, so a series can be
- * assembled by fetching several quarters and parsing each one. Without this the
- * whole Indian cohort has no reported financials at all and every seat in a
- * review blocks on evidence that is, in fact, public.
- *
- * Documents are fetched with a full browser header set because these hosts
- * refuse a bare client, and several arrive AES-256 encrypted with an empty user
- * password, which lib/pdf/extract handles.
- */
-
 import { cached } from "@/lib/core/cache";
 import {
   IR_SOURCES,
@@ -32,18 +18,10 @@ const HISTORY_TTL_MS = 6 * 60 * 60 * 1000;
 export interface IrProfile {
   symbol: string;
   name: string;
-  /** Where the documents live, for the source link. */
   irUrl: string;
   quarters: IrQuarter[];
-  /** Why each document that failed did so. Silent skipping makes a blocked
-   *  host indistinguishable from an unpublished quarter, which is exactly the
-   *  ambiguity that wastes an afternoon. */
   attempts: Array<{ label: string; ok: boolean; reason: string | null }>;
 }
-
-/* ---------------------------------------------------------------- *
- * Harvest
- * ---------------------------------------------------------------- */
 
 async function fetchQuarter(ref: IrDocRef): Promise<IrQuarter | null> {
   const res = await cached(`ir:doc:${ref.url}`, DOC_TTL_MS, async () => {
@@ -58,14 +36,6 @@ async function fetchQuarter(ref: IrDocRef): Promise<IrQuarter | null> {
   return res.value;
 }
 
-/**
- * Pulls the last `count` quarters.
- *
- * Requests are serialised. These are a publisher's own servers, and a burst of
- * concurrent PDF downloads is both impolite and the fastest way to get blocked.
- * Quarters that 404 are skipped: the newest candidate often has not been
- * published yet, which is expected rather than an error.
- */
 export async function getIrHistory(
   symbol: string,
   count = 8,
@@ -108,7 +78,6 @@ export async function getIrHistory(
       await new Promise((r) => setTimeout(r, 200));
     }
 
-    // Oldest first, so charts read left to right.
     quarters.reverse();
 
     return {
@@ -120,10 +89,6 @@ export async function getIrHistory(
     } satisfies IrProfile;
   });
 
-  // Several publishers refuse datacentre IP ranges, so a deployed instance is
-  // blocked where a workstation is not. The snapshot is the same documents,
-  // harvested where the fetch succeeds, and it is labelled as such rather than
-  // presented as live.
   if (res.value.quarters.length === 0) {
     const snap = IR_SNAPSHOT[symbol];
     if (snap && snap.quarters.length > 0) {
@@ -171,7 +136,6 @@ export async function getIrHistory(
   };
 }
 
-/** Confirms a document is reachable without downloading it in full. */
 export async function probeIrDocument(url: string): Promise<boolean> {
   try {
     const res = await safeFetch(url, { timeoutMs: 8000, retries: 0 });

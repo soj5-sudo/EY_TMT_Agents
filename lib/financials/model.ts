@@ -1,23 +1,3 @@
-/**
- * Company financial model, built from SEC XBRL company facts.
- *
- * One request per company returns every tagged concept, so a full statement
- * costs a single call rather than fifteen.
- *
- * Three details decide whether the output is trustworthy:
- *
- *   Tag fallbacks. Filers use different concepts for the same line and migrate
- *   between them mid-history. Every line is resolved against an ordered
- *   candidate list and merged, so a series is never silently truncated.
- *
- *   Restatements. The same period appears repeatedly across filings with
- *   different values. The most recently filed value wins.
- *
- *   Fourth quarter. Most filers never report Q4 on its own; it sits inside the
- *   annual figure. Q4 is derived as full year less the three reported quarters,
- *   and flagged as derived so nobody mistakes it for a filed number.
- */
-
 import { cached } from "@/lib/core/cache";
 import { fetchJson } from "@/lib/core/fetcher";
 import type { Envelope, Provenance } from "@/lib/core/types";
@@ -50,21 +30,18 @@ interface CompanyFacts {
 }
 
 export interface Period {
-  /** Label such as "FY2025" or "Q3 FY2025". */
   label: string;
   start: string | null;
   end: string;
   value: number;
   form: string;
   filed: string;
-  /** True when the value was computed rather than filed directly. */
   derived?: boolean;
 }
 
 export interface Line {
   key: string;
   label: string;
-  /** Concept tags that actually resolved, for audit. */
   tags: string[];
   annual: Period[];
   quarterly: Period[];
@@ -75,29 +52,15 @@ export interface Statements {
   entityName: string;
   lines: Record<string, Line>;
   currency: "USD";
-  /** Most recent complete fiscal year label. */
   latestFy: string | null;
 }
-
-/* ---------------------------------------------------------------- *
- * Concept map
- * ---------------------------------------------------------------- */
 
 interface LineSpec {
   key: string;
   label: string;
-  /** us-gaap concept candidates, in preference order. */
   tags: string[];
-  /** ifrs-full candidates. Foreign private issuers file on Form 20-F under IFRS. */
   ifrs?: string[];
-  /** Balance-sheet items are point-in-time, not durations. */
   instant?: boolean;
-  /**
-   * Ratios using this line as a denominator are suppressed when it falls below
-   * this share of revenue. A near-zero denominator produces a technically
-   * correct number that is analytically meaningless, such as a cash conversion
-   * of 6,933 percent on a company that barely broke even.
-   */
   minShareOfRevenue?: number;
 }
 
@@ -169,7 +132,6 @@ export const LINE_SPECS: LineSpec[] = [
     label: "Net income",
     tags: ["NetIncomeLoss", "ProfitLoss"],
     ifrs: ["ProfitLoss", "ProfitLossAttributableToOwnersOfParent"],
-    // Below two percent of revenue the profit line stops being a usable base.
     minShareOfRevenue: 0.02,
   },
   {
@@ -227,10 +189,6 @@ export const LINE_SPECS: LineSpec[] = [
   },
 ];
 
-/* ---------------------------------------------------------------- *
- * Extraction
- * ---------------------------------------------------------------- */
-
 const ANNUAL_FORMS = /^(10-K|20-F|40-F)/;
 
 function days(a: string | null | undefined, b: string): number | null {
@@ -238,7 +196,6 @@ function days(a: string | null | undefined, b: string): number | null {
   return (Date.parse(b) - Date.parse(a)) / 86_400_000;
 }
 
-/** Newest filing wins for a given period. */
 function collapse(facts: RawFact[], keyOf: (f: RawFact) => string): RawFact[] {
   const map = new Map<string, RawFact>();
   for (const f of facts) {
@@ -251,44 +208,23 @@ function collapse(facts: RawFact[], keyOf: (f: RawFact) => string): RawFact[] {
   return [...map.values()];
 }
 
-/**
- * Names a fiscal year from the calendar year its period ends in, which is the
- * universal convention: NVIDIA's year ending January 2026 is fiscal 2026.
- *
- * The fy field on a fact is deliberately ignored. It describes the filing that
- * reported the number, not the period the number covers, so three different
- * years reported in one annual report all carry the same fy and collapse onto
- * a single label. That produced a NVIDIA revenue series with FY2026 printed
- * three times against three different values.
- */
 function fiscalLabel(end: string): string {
   return `FY${new Date(`${end}T00:00:00Z`).getUTCFullYear()}`;
 }
 
-/**
- * Labels a quarter from its own period end and the company's fiscal year end.
- *
- * The fy and fp fields on a fact describe the filing that reported it, not the
- * period it covers, so two different quarters routinely carry the same pair.
- * Deriving the label from the dates is the only way to get a series that reads
- * in order and does not repeat itself.
- */
 function quarterLabel(end: string, fyEndMonth: number): string {
   const d = new Date(`${end}T00:00:00Z`);
   const month = d.getUTCMonth() + 1;
   const year = d.getUTCFullYear();
 
-  // Months elapsed since the fiscal year began.
   const since = (month - fyEndMonth - 1 + 12) % 12;
   const quarter = Math.floor(since / 3) + 1;
 
-  // A fiscal year is named for the calendar year it ends in.
   const fiscalYear = month > fyEndMonth ? year + 1 : year;
 
   return `Q${quarter} FY${fiscalYear}`;
 }
 
-/** Month (1-12) the fiscal year ends in, taken from the annual series. */
 function fiscalYearEndMonth(annual: Period[]): number {
   const last = annual.at(-1);
   if (!last) return 12;
@@ -303,8 +239,6 @@ function buildLine(
   const collected: RawFact[] = [];
   const tagsUsed: string[] = [];
 
-  // us-gaap first. Foreign private issuers file under IFRS on Form 20-F and
-  // carry no us-gaap facts at all, so the second pass is what makes them work.
   const sources: Array<[string, Record<string, { units: Record<string, RawFact[]> }>]> = [
     ...spec.tags.map((t) => [t, gaap] as [string, typeof gaap]),
     ...(spec.ifrs ?? []).map((t) => [t, ifrs] as [string, typeof ifrs]),
@@ -343,14 +277,11 @@ function buildLine(
       key: spec.key,
       label: spec.label,
       tags: tagsUsed,
-      // Balance-sheet dates come from every form, so keep them all and let the
-      // caller match on the year end rather than filtering by form here.
       annual: points.slice(-40),
       quarterly: points.slice(-16),
     };
   }
 
-  // Annual: full-year durations on an annual form.
   const annual = collapse(
     collected.filter((f) => {
       const d = days(f.start, f.end);
@@ -368,7 +299,6 @@ function buildLine(
       filed: f.filed ?? "",
     }));
 
-  // Quarterly: roughly 90-day durations, from any form.
   const quarterly = collapse(
     collected.filter((f) => {
       const d = days(f.start, f.end);
@@ -398,14 +328,6 @@ function buildLine(
   };
 }
 
-/**
- * Fills the missing fourth quarter.
- *
- * Filers report Q1 to Q3 on Form 10-Q and fold Q4 into the annual report, so a
- * raw quarterly series has a hole every fourth period. Where the three reported
- * quarters and the full year are all present, Q4 is the remainder. It is marked
- * derived, because it is arithmetic rather than a filed figure.
- */
 function deriveFourthQuarters(line: Line): Line {
   if (line.annual.length === 0 || line.quarterly.length === 0) return line;
 
@@ -444,10 +366,6 @@ function deriveFourthQuarters(line: Line): Line {
   filled.sort((a, b) => a.end.localeCompare(b.end));
   return { ...line, quarterly: filled.slice(-16) };
 }
-
-/* ---------------------------------------------------------------- *
- * Entry point
- * ---------------------------------------------------------------- */
 
 export async function getStatements(cik: string): Promise<Envelope<Statements>> {
   const padded = cik.padStart(10, "0");
@@ -493,16 +411,10 @@ export async function getStatements(cik: string): Promise<Envelope<Statements>> 
   };
 }
 
-/* ---------------------------------------------------------------- *
- * Derived measures
- * ---------------------------------------------------------------- */
-
 export interface Ratio {
   label: string;
-  /** Null where the periods do not align. Never computed across mismatched periods. */
   value: number | null;
   unit: "%" | "x" | "days" | "USD";
-  /** Plain reading of what the number indicates. */
   reading: string;
 }
 
@@ -520,7 +432,6 @@ export function annualRatios(s: Statements): {
   const end = rev.end;
   const revenue = rev.value;
 
-  /** Computes only when both sides are present and the denominator is usable. */
   const ratio = (
     label: string,
     numerator: number | null,
@@ -534,7 +445,6 @@ export function annualRatios(s: Statements): {
       Number.isFinite(numerator) &&
       Number.isFinite(denominator) &&
       denominator !== 0 &&
-      // A denominator close to zero yields a correct number that means nothing.
       Math.abs(denominator) >= Math.abs(revenue) * 0.02;
 
     const scale = unit === "%" ? 100 : unit === "days" ? 365 : 1;
@@ -559,8 +469,6 @@ export function annualRatios(s: Statements): {
   const receivables = at(s.lines.receivables, end);
   const equity = at(s.lines.equity, end);
 
-  // Gross profit is often untagged. Derive it from cost of revenue instead of
-  // dropping the line, and only when cost of revenue covers the same year.
   const grossTagged = at(s.lines.grossProfit, end);
   const cost = at(s.lines.costOfRevenue, end);
   const grossFallback = grossTagged ?? (cost !== null ? revenue - cost : null);
@@ -645,7 +553,6 @@ export function annualRatios(s: Statements): {
   };
 }
 
-/** Aligns a set of lines onto the periods revenue actually covers. */
 export function alignedQuarters(
   s: Statements,
   keys: string[],

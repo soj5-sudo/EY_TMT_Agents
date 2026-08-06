@@ -78,7 +78,6 @@ export async function POST(request: Request) {
       documents,
     );
 
-    // The dossier is large and already available from the research endpoint.
     const { dossier, ...rest } = run;
     return NextResponse.json(
       {

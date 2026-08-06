@@ -1,21 +1,3 @@
-/**
- * Question answering.
- *
- * Two in-house layers, no hosted model anywhere in the path.
- *
- *   compute    Parses the question, resolves companies and measures against
- *              the coverage universe, and calculates the answer from filed
- *              statements. This is what answers "NVIDIA's operating margin"
- *              with a ratio computed from the filing rather than a sentence
- *              that mentions margins.
- *
- *   retrieve   BM25 over the console's own corpus, used for questions about
- *              method, product and coverage, where the answer is text.
- *
- * Every answer states which layer produced it and carries its sources, so a
- * reader can always tell a computed figure from a quoted passage.
- */
-
 import { Bm25Index, type RagDoc, type ScoredDoc } from "@/lib/rag/bm25";
 import { staticCorpus, newsDocs, quoteDocs } from "@/lib/rag/corpus";
 import { computeAnswer } from "@/lib/brain/engine";
@@ -34,21 +16,15 @@ export interface Citation {
 export interface Answer {
   text: string;
   citations: Citation[];
-  /** Which in-house layer produced the answer. */
   mode: "computed" | "extractive";
   confidence: "high" | "moderate" | "low";
   usedUntrusted: boolean;
   injectionNotice: string | null;
   providerLabel: string;
-  /** Structured result from the computation layer, when there is one. */
   table: Array<{ label: string; value: string; note?: string }> | null;
 }
 
 const ENGINE_LABEL = "In-house analytical engine";
-
-/* ---------------------------------------------------------------- *
- * Index construction
- * ---------------------------------------------------------------- */
 
 export interface LiveContext {
   news?: NewsItem[];
@@ -66,31 +42,15 @@ export function buildIndex(live: LiveContext = {}): Bm25Index {
   return index;
 }
 
-/* ---------------------------------------------------------------- *
- * Ranking
- * ---------------------------------------------------------------- */
-
 const NEWS_INTENT =
   /\b(news|headline|latest|recent|report(ed|ing)?|announce\w*|acquisi\w*|acquire\w*|merger|deal|today|this week|happening|said|says)\b/i;
 
-/**
- * Re-ranks a raw BM25 result set before it is used as evidence.
- *
- * Term overlap alone lets a headline about an unrelated company outrank a
- * filing line for sharing the word "margin". Weighting is symmetric and driven
- * by the question: ask about margins and headlines are discounted so filings
- * win; ask what the latest news is and headlines are promoted.
- */
 function rerank(hits: ScoredDoc[], question: string): ScoredDoc[] {
   const factor = NEWS_INTENT.test(question) ? 2.2 : 0.45;
   return [...hits]
     .map((h) => (h.doc.untrusted ? { ...h, score: h.score * factor } : h))
     .sort((a, b) => b.score - a.score);
 }
-
-/* ---------------------------------------------------------------- *
- * Retrieval layer
- * ---------------------------------------------------------------- */
 
 function relevantSentences(body: string, terms: Set<string>, limit: number): string[] {
   const sentences = body
@@ -109,9 +69,6 @@ function relevantSentences(body: string, terms: Set<string>, limit: number): str
   scored.sort((a, b) => b.score - a.score);
   const picked = scored.filter((s) => s.score > 0).slice(0, limit);
 
-  // With no matched terms, as when documentation is served because the wording
-  // missed rather than because the answer is absent, the opening sentences are
-  // the right extract: documentation is written with its summary first.
   if (picked.length === 0) return sentences.slice(0, limit);
 
   return sentences.filter((s) => picked.some((p) => p.sentence === s));
@@ -128,25 +85,17 @@ const NO_ANSWER =
   "the filed statements behind it, the live feeds, and the console's own documentation. " +
   "Try naming a company and a measure, such as the operating margin of a name in the universe.";
 
-/** Sections that describe the console rather than the companies it covers. */
 const DOC_SECTIONS = new Set(["Product", "Diligence method"]);
 
 export function answerExtractive(
   index: Bm25Index,
   question: string,
-  /** Restricts retrieval to documentation when the question is about the
-   *  console itself. Without it, "what can this tool do" retrieves whichever
-   *  press headline happens to share a word with the question, which reads as
-   *  a non sequitur and undermines every other answer on the page. */
   documentationOnly = false,
 ): Answer {
   let hits = rerank(index.search(question, 20), question);
   if (documentationOnly) {
     hits = hits.filter((h) => !h.doc.untrusted && DOC_SECTIONS.has(h.doc.section));
 
-    // A question about the console phrased in words the documentation does not
-    // happen to use still deserves the documentation. Retrieval that returns
-    // nothing here means the wording missed, not that the answer is absent.
     if (hits.length === 0) {
       const overview = index.bySection("Product").slice(0, 3);
       hits = overview.map((doc) => ({ doc, score: 1, matchedTerms: [] }));
@@ -203,13 +152,7 @@ export function answerExtractive(
   };
 }
 
-/* ---------------------------------------------------------------- *
- * Router
- * ---------------------------------------------------------------- */
-
 export async function answerQuestion(index: Bm25Index, question: string): Promise<Answer> {
-  // Computation first: a question with a company and a measure has a numeric
-  // answer, and quoting a passage about it would be a worse one.
   const computed = await computeAnswer(question).catch(() => null);
 
   if (computed && computed.method === "computed") {
@@ -232,13 +175,9 @@ export async function answerQuestion(index: Bm25Index, question: string): Promis
     };
   }
 
-  // A question about the console is answered from the console's own
-  // documentation rather than from company coverage.
   const parsed = parseQuestion(question);
   const retrieved = answerExtractive(index, question, parsed.intent === "product");
 
-  // A computation that ran but found the measure unreported is a better answer
-  // than a loosely related passage, so it is carried through.
   if (computed && computed.method === "none" && retrieved.confidence === "low") {
     return {
       ...retrieved,

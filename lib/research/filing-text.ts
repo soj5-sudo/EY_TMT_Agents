@@ -1,24 +1,3 @@
-/**
- * Annual report text.
- *
- * The tagged financial data answers what the numbers are. It does not answer
- * who the customers are, what management says it competes against, what the
- * board discloses as its principal risks, or whether there is litigation worth
- * pricing. All of that is in the narrative sections of the annual report, which
- * is a public document served from the same register as the XBRL.
- *
- * This fetches the primary document of the latest annual filing, reduces it to
- * text while preserving block structure, and cuts it into the numbered items.
- * Sectioning is done by span rather than by first match: every annual report
- * names its items twice, once in the contents table and once at the section
- * itself, and taking the first match yields a two-line section every time. The
- * longest span between consecutive item markers is the real section.
- *
- * Extraction is conservative. A signal is only reported when the sentence that
- * carries it is retained alongside it, so every statement an agent makes from
- * this can be traced back to the filed sentence it came from.
- */
-
 import { fetchJson, fetchText } from "@/lib/core/fetcher";
 import { cached } from "@/lib/core/cache";
 import type { Provenance } from "@/lib/core/types";
@@ -29,14 +8,6 @@ const HEADERS = {
   "User-Agent": "EY TMT Intelligence Console soj5@cornell.edu",
 };
 
-/**
- * What a section is about, independent of how the form numbers it.
- *
- * A domestic annual report puts the business description in Item 1 and the
- * risk factors in Item 1A. A foreign private issuer puts them in Item 4 and
- * Item 3 of a 20-F. Agents ask for the role, so neither they nor the
- * extraction rules below need to know which form they are reading.
- */
 export type SectionRole =
   | "business"
   | "risk"
@@ -60,11 +31,8 @@ export interface FilingSection {
 }
 
 export interface TextSignal {
-  /** What was found. */
   label: string;
-  /** The sentence from the filing that carries it, quoted verbatim. */
   sentence: string;
-  /** Item the sentence came from. */
   item: string;
 }
 
@@ -75,7 +43,6 @@ export interface FilingText {
   url: string;
   chars: number;
   sections: FilingSection[];
-  /** Individual principal-risk headings from the risk factors item. */
   riskHeadings: string[];
   signals: {
     customerConcentration: TextSignal[];
@@ -94,10 +61,6 @@ export interface FilingText {
   provenance: Provenance;
 }
 
-/* ------------------------------------------------------------------ *
- * HTML to text
- * ------------------------------------------------------------------ */
-
 const BLOCK = /<\/(p|div|tr|h[1-6]|li|table|section)>/gi;
 
 function htmlToText(html: string): string {
@@ -105,8 +68,6 @@ function htmlToText(html: string): string {
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<!--[\s\S]*?-->/g, " ")
-    // Block ends become newlines so paragraph structure survives, which is
-    // what makes risk headings recoverable further down.
     .replace(BLOCK, "\n")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<td[^>]*>/gi, " | ")
@@ -127,16 +88,11 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-/* ------------------------------------------------------------------ *
- * Sectioning
- * ------------------------------------------------------------------ */
-
 interface ItemDef {
   title: string;
   role: SectionRole;
 }
 
-/** Item numbering of an annual report on the domestic forms. */
 const ITEMS_10K: Record<string, ItemDef> = {
   "1": { title: "Business", role: "business" },
   "1A": { title: "Risk Factors", role: "risk" },
@@ -155,7 +111,6 @@ const ITEMS_10K: Record<string, ItemDef> = {
   "13": { title: "Certain Relationships and Related Transactions", role: "other" },
 };
 
-/** Item numbering of an annual report on Form 20-F, which is different. */
 const ITEMS_20F: Record<string, ItemDef> = {
   "3": { title: "Key Information and Risk Factors", role: "risk" },
   "4": { title: "Information on the Company", role: "business" },
@@ -172,24 +127,9 @@ const ITEMS_20F: Record<string, ItemDef> = {
   "16K": { title: "Cybersecurity", role: "cyber" },
 };
 
-/**
- * Cuts the document into items.
- *
- * Two things defeat a naive split. Every annual report names its items twice,
- * once in the contents table and once at the section, so the first match is
- * always a two-line stub. And the body cross-references other items in the
- * middle of sentences, so an unguarded marker cuts a section short at its own
- * internal reference.
- *
- * The contents table is handled by taking the longest span per item. The
- * cross references are handled by only accepting a marker that begins a block,
- * since a reference inside a sentence never does.
- */
 function sectionise(text: string, form: string): FilingSection[] {
   const map = form.startsWith("20-F") || form.startsWith("40-F") ? ITEMS_20F : ITEMS_10K;
 
-  // (^|\n) anchors the marker to the start of a block, which is what
-  // distinguishes a heading from "as described in Item 1A" inside a sentence.
   const marker = /(?:^|\n)\s*Item\s+(\d{1,2}[A-K]?)\s*[.:—–-]?\s*/gi;
   const marks: Array<{ item: string; at: number; after: number }> = [];
 
@@ -202,10 +142,6 @@ function sectionise(text: string, form: string): FilingSection[] {
   }
   if (marks.length === 0) return [];
 
-  // Filers print a running page header naming the current item, which puts the
-  // same marker at the start of a line on every page of that section. Left
-  // alone, each repeat opens a new span and the section collapses to one page.
-  // Consecutive markers for the same item are one section, so runs are merged.
   const runs: typeof marks = [];
   for (const m of marks) {
     if (runs.length > 0 && runs[runs.length - 1].item === m.item) continue;
@@ -227,7 +163,6 @@ function sectionise(text: string, form: string): FilingSection[] {
   const out: FilingSection[] = [];
   for (const [item, { start, end }] of best) {
     const body = text.slice(start, end).trim();
-    // A real section carries substance. Anything shorter is a stub entry.
     if (body.length < 600) continue;
     const def = map[item];
     out.push({ item, role: def.role, title: def.title, text: body, chars: body.length });
@@ -236,15 +171,6 @@ function sectionise(text: string, form: string): FilingSection[] {
   return out.sort((a, b) => a.item.localeCompare(b.item, undefined, { numeric: true }));
 }
 
-/* ------------------------------------------------------------------ *
- * Risk headings
- * ------------------------------------------------------------------ */
-
-/**
- * Risk factor headings are their own paragraph and read as a claim rather than
- * a sentence of prose. They are recoverable because a heading line is short,
- * stands alone, and is followed by a longer block.
- */
 function riskHeadings(riskText: string): string[] {
   const lines = riskText.split("\n").map((l) => l.trim()).filter(Boolean);
   const out: string[] = [];
@@ -256,10 +182,7 @@ function riskHeadings(riskText: string): string[] {
     if (/^Item\s/i.test(line)) continue;
     if (/^\s*\|/.test(line) || line.includes(" | ")) continue;
     if (/^(Table of Contents|PART|Page)\b/i.test(line)) continue;
-    // A heading is followed by substantially more text than itself.
     if (lines[i + 1].length < line.length) continue;
-    // Headings in this item are risk claims, which read with a modal or a
-    // consequence verb. This is what excludes ordinary prose lines.
     if (!/\b(may|could|might|will|risk|failure|inability|depend|adverse|if we|our business|subject to)\b/i.test(line))
       continue;
     out.push(line.replace(/\s+/g, " "));
@@ -268,10 +191,6 @@ function riskHeadings(riskText: string): string[] {
 
   return [...new Set(out)];
 }
-
-/* ------------------------------------------------------------------ *
- * Signal extraction
- * ------------------------------------------------------------------ */
 
 function sentences(text: string): string[] {
   return text
@@ -283,7 +202,6 @@ function sentences(text: string): string[] {
 
 interface Rule {
   label: string;
-  /** Section roles to search, in order of preference. */
   roles: SectionRole[];
   re: RegExp;
   max: number;
@@ -384,8 +302,6 @@ function extractSignals(sections: FilingSection[]): FilingText["signals"] {
       for (const s of sentences(section.text)) {
         if (hits.length >= rule.max) break;
         if (!rule.re.test(s)) continue;
-        // Contents-table debris and page furniture repeat; drop duplicates on
-        // a normalised key rather than on the raw sentence.
         const k = s.slice(0, 90).toLowerCase().replace(/[^a-z]/g, "");
         if (seen.has(k)) continue;
         seen.add(k);
@@ -401,10 +317,6 @@ function extractSignals(sections: FilingSection[]): FilingText["signals"] {
   return out;
 }
 
-/* ------------------------------------------------------------------ *
- * Fetch
- * ------------------------------------------------------------------ */
-
 interface SubmissionsDoc {
   filings: {
     recent: {
@@ -419,13 +331,6 @@ interface SubmissionsDoc {
 
 const ANNUAL = ["10-K", "20-F", "40-F"];
 
-/**
- * Reads the narrative sections of the most recent annual report.
- *
- * Returns null rather than throwing when the filer has no annual report on the
- * register, because that is an ordinary condition for a recent registrant and
- * the agents downstream handle absence by raising a request.
- */
 export async function getFilingText(cik: string): Promise<FilingText | null> {
   const padded = cik.padStart(10, "0");
 
@@ -490,7 +395,6 @@ export async function getFilingText(cik: string): Promise<FilingText | null> {
   };
 }
 
-/** Convenience read used by agents, by role rather than by item number. */
 export function section(f: FilingText | null, role: SectionRole): FilingSection | null {
   return f?.sections.find((s) => s.role === role) ?? null;
 }

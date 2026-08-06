@@ -1,6 +1,5 @@
 import type { Provenance } from "@/lib/core/types";
 
-/** Page masthead used by all three dashboards. */
 export function PageHeader({
   index,
   title,
@@ -69,13 +68,6 @@ export function Panel({
   );
 }
 
-/**
- * Provenance marker.
- *
- * Rendered next to anything numeric. The console's central promise is that a
- * reader can always tell a filed figure from a live quote from a fallback, and
- * this is where that promise is kept.
- */
 export function Prov({ p }: { p: Provenance }) {
   const label: Record<Provenance["kind"], string> = {
     live: "Live",
@@ -108,7 +100,6 @@ export function Prov({ p }: { p: Provenance }) {
   );
 }
 
-/** Empty value. Never a blank cell, never a dash. */
 export function NotSet() {
   return <span style={{ color: "var(--text-muted)" }}>Not set</span>;
 }

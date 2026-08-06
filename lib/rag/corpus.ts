@@ -1,12 +1,3 @@
-/**
- * Retrieval corpus: product documentation, per-row data passages, and live
- * news and filing extracts. Live passages carry untrusted = true and are
- * fenced before reaching a prompt.
- *
- * Passages are complete statements with figures inline, so an extractive
- * answer can quote rather than reconstruct.
- */
-
 import type { RagDoc } from "@/lib/rag/bm25";
 import type { NewsItem, Quote } from "@/lib/core/types";
 import {
@@ -36,10 +27,6 @@ function fmt(n: number): string {
 function pct(n: number): string {
   return `${n > 0 ? "+" : ""}${n.toFixed(1)}%`;
 }
-
-/* ------------------------------------------------------------------ *
- * 1. Product passages
- * ------------------------------------------------------------------ */
 
 const PRODUCT_DOCS: RagDoc[] = [
   {
@@ -137,10 +124,6 @@ const PRODUCT_DOCS: RagDoc[] = [
       "Text arriving from third parties is stripped of markup and control characters, and instruction-shaped phrasing is defanged before it can reach a model prompt.",
   },
 ];
-
-/* ------------------------------------------------------------------ *
- * 2. Data passages
- * ------------------------------------------------------------------ */
 
 function growthDocs(): RagDoc[] {
   const docs: RagDoc[] = [];
@@ -385,13 +368,8 @@ function cashFlowDocs(): RagDoc[] {
   ];
 }
 
-/* ------------------------------------------------------------------ *
- * 3. Live passages
- * ------------------------------------------------------------------ */
-
 export function newsDocs(items: NewsItem[]): RagDoc[] {
   return items.slice(0, 60).map((item) => {
-    // Third-party text. Defanged before it can enter a prompt.
     const safe = neutraliseUntrusted(item.title);
     return {
       id: `news:${item.id}`,
@@ -432,8 +410,6 @@ export function quoteDocs(quotes: Quote[]): RagDoc[] {
 }
 
 export function filingLineDocs(lines: string[], label: string, url: string): RagDoc[] {
-  // Only lines with real content are worth indexing. Slide furniture and page
-  // numbers add noise and dilute IDF.
   const useful = lines.filter(
     (l) => l.trim().length > 30 && /\d/.test(l) && !/^\s*\d+\s*$/.test(l),
   );
@@ -452,11 +428,6 @@ export function filingLineDocs(lines: string[], label: string, url: string): Rag
   });
 }
 
-/* ------------------------------------------------------------------ *
- * Assembly
- * ------------------------------------------------------------------ */
-
-/** The passages that need no network access. Always available. */
 export function staticCorpus(): RagDoc[] {
   return [
     ...PRODUCT_DOCS,
@@ -469,10 +440,6 @@ export function staticCorpus(): RagDoc[] {
     ...cashFlowDocs(),
   ];
 }
-
-/* ------------------------------------------------------------------ *
- * Due diligence method passages
- * ------------------------------------------------------------------ */
 
 const DILIGENCE_DOCS: RagDoc[] = [
   {

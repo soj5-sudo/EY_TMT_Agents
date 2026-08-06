@@ -15,15 +15,6 @@ import {
   useTooltip,
 } from "./kit";
 
-/**
- * Multi-series line with a shared crosshair.
- *
- * Used for rebased relative performance, where every series starts at 100 so
- * instruments priced in different currencies can share one axis. Series can be
- * toggled from the legend; the axis rescales to what remains visible, which is
- * the point of toggling in the first place.
- */
-
 export interface LineSeries {
   key: string;
   label: string;

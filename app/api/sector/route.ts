@@ -10,17 +10,6 @@ import { cached } from "@/lib/core/cache";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-/**
- * Sector fundamentals.
- *
- * The dashboard is built on filings rather than share prices. Quote endpoints
- * rate-limit shared hosting hard enough that a price-led page renders empty
- * from a deployment, and for a diligence tool the day's move is decoration
- * anyway: revenue, margin and research intensity are what the question is
- * actually about. The regulator's own API answers reliably from anywhere, so
- * this panel always has data.
- */
-
 const TTL_MS = 6 * 60 * 60 * 1000;
 const SPACING_MS = 110;
 
@@ -42,7 +31,6 @@ export interface SectorRow {
   revenueGrowthPct: number | null;
   lastFiled: string | null;
   source: "sec" | "ir" | null;
-  /** Why this name carries no figures, when it carries none. */
   coverageNote?: string;
 }
 
@@ -108,10 +96,6 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
     };
   }
 
-  // Outside the SEC register: the company's own published results files. The
-  // same path the rest of the console uses, so this panel gets the live scrape
-  // when the publisher allows it and the dated harvest when it does not,
-  // rather than showing an empty row for a company that publishes everything.
   const built = await ledgerFor(c).catch(() => null);
   const ledger = built?.ledger ?? null;
   const revenueLine = ledger?.series.revenue;
@@ -121,7 +105,6 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
     const quarterly = revenueLine.quarterly;
     const useAnnual = annual.length > 0;
 
-    // A quarter is annualised so the column compares with annual filers.
     const revenue = useAnnual
       ? (annual.at(-1)?.value ?? null)
       : quarterly.at(-1)
@@ -180,7 +163,6 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
   return {
     ...base,
     period: latest.label,
-    // Quarterly revenue annualised, so the column compares with annual filers.
     revenue: latest.revenueUsdMn === null ? null : latest.revenueUsdMn * 1e6 * 4,
     operatingMargin: latest.operatingMarginPct,
     netMargin: latest.netMarginPct,
@@ -192,10 +174,6 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
 
 export async function GET() {
   const res = await cached("sector:fundamentals", TTL_MS, async () => {
-    // Four lanes with a short stagger. The regulator permits ten requests a
-    // second; serialising fifty six companies took thirty eight seconds, which
-    // is the whole page's cold load. This stays well inside the limit and
-    // brings it under ten.
     const rows: SectorRow[] = [];
     const queue = [...UNIVERSE];
     let cursor = 0;
@@ -208,7 +186,6 @@ export async function GET() {
         try {
           rows.push(await buildRow(queue[i]));
         } catch {
-          // One unresolvable name must not empty the sector view.
         }
         await new Promise((r) => setTimeout(r, SPACING_MS));
       }
@@ -216,7 +193,6 @@ export async function GET() {
 
     await Promise.all([0, 1, 2, 3].map(lane));
 
-    // Restore universe order, which the lanes do not preserve.
     const order = new Map(UNIVERSE.map((c, i) => [c.symbol, i]));
     rows.sort((a, b) => (order.get(a.symbol) ?? 0) - (order.get(b.symbol) ?? 0));
     return rows;
@@ -231,7 +207,6 @@ export async function GET() {
     return s[Math.floor(s.length / 2)];
   };
 
-  // Subsector aggregates: total revenue and median margin.
   const subsectors = [...new Set(rows.map((r) => r.subsector))].map((name) => {
     const members = withData.filter((r) => r.subsector === name);
     return {
@@ -247,7 +222,6 @@ export async function GET() {
     };
   }).sort((a, b) => b.revenue - a.revenue);
 
-  // Theme aggregates on fundamentals, not on the day's price move.
   const themes = (Object.keys(THEME_LABELS) as Theme[]).map((t) => {
     const members = withData.filter((r) => r.themes.includes(t));
     return {
@@ -287,8 +261,6 @@ export async function GET() {
       coverage: {
         total: rows.length,
         withData: withData.length,
-        // Names with no reported figures, each with the reason. A gap that is
-        // explained is information; one that is not reads as a defect.
         notCovered: rows
           .filter((r) => r.revenue === null)
           .map((r) => ({ short: r.short, reason: r.coverageNote ?? "No published source is wired for this name." })),

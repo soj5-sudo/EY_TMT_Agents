@@ -1,14 +1,5 @@
 "use client";
 
-/**
- * Client fetch wrapper.
- *
- * Bare fetch throws "Failed to fetch" for every network-layer problem: server
- * down, connection dropped, request aborted. That string tells a user nothing
- * and sends them looking for a bug in the wrong place. This distinguishes the
- * cases and says what to do about each.
- */
-
 export class ApiError extends Error {
   readonly status: number | null;
   constructor(message: string, status: number | null = null) {
@@ -52,7 +43,6 @@ export async function apiFetch<T>(
     try {
       body = JSON.parse(text);
     } catch {
-      // Non-JSON response, such as a plain-text refusal from the edge gate.
       if (!res.ok) throw new ApiError(text.slice(0, 300), res.status);
     }
   }

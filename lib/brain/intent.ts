@@ -1,16 +1,3 @@
-/**
- * Layer 1: parse and resolve.
- *
- * Turns a question into structured intent: which companies, which measures,
- * which periods, and what the asker wants done with them. Rule-based and
- * deterministic, because a diligence answer has to be reproducible and every
- * number in it has to be traceable to a filing.
- *
- * This is not a wrapper around a hosted model. The resolution tables below are
- * the vocabulary, and they come from the coverage universe and the statement
- * model, so the parser always knows exactly what the system can compute.
- */
-
 import { UNIVERSE, type Company } from "@/lib/data/universe";
 import { CONFIDENCE_FLOOR, classifyIntent } from "@/lib/brain/classifier";
 
@@ -41,10 +28,8 @@ export type MetricKey =
 export interface MetricDef {
   key: MetricKey;
   label: string;
-  /** Words that select this measure. Longest match wins. */
   terms: string[];
   unit: "%" | "USD" | "days" | "count";
-  /** Higher is better, for ranking. Null where direction is not a judgement. */
   betterHigh: boolean | null;
 }
 
@@ -69,29 +54,15 @@ export interface ParsedQuestion {
   intent: Intent;
   companies: Company[];
   metrics: MetricDef[];
-  /** Subsector named in the question, for cohort ranking. */
   subsector: string | null;
-  /** True when the asker wants the extremes rather than a value. */
   superlative: "best" | "worst" | null;
 }
 
-/* ---------------------------------------------------------------- *
- * Entity resolution
- * ---------------------------------------------------------------- */
-
-/**
- * Alias table built once from the universe.
- *
- * Two-letter and highly ambiguous short names are excluded: matching "arm" or
- * "meta" inside ordinary prose would attach the wrong company to a question,
- * which is the single most expensive parsing error here.
- */
 const AMBIGUOUS = new Set(["arm", "meta", "dell", "sap"]);
 
 interface Alias {
   needle: string;
   company: Company;
-  /** Longer aliases are tested first so "tech mahindra" beats "tech". */
   weight: number;
 }
 
@@ -108,8 +79,6 @@ const ALIASES: Alias[] = (() => {
 
     for (const n of new Set([base, short, ticker])) {
       if (!n || n.length < 3) continue;
-      // An ambiguous word only counts when it is the full company short name
-      // and appears with a capital in the original question, checked later.
       out.push({ needle: n, company: c, weight: n.length + (AMBIGUOUS.has(n) ? -50 : 0) });
     }
   }
@@ -125,8 +94,6 @@ function resolveCompanies(q: string, original: string): Company[] {
     const re = new RegExp(`\\b${a.needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
     if (!re.test(remaining)) continue;
 
-    // Ambiguous words need a capitalised occurrence in the raw question to
-    // count, so "arm" in "at arm's length" does not resolve to Arm Holdings.
     if (AMBIGUOUS.has(a.needle)) {
       const capital = new RegExp(`\\b${a.needle[0].toUpperCase()}${a.needle.slice(1)}\\b`);
       if (!capital.test(original)) continue;
@@ -139,10 +106,6 @@ function resolveCompanies(q: string, original: string): Company[] {
   return found;
 }
 
-/* ---------------------------------------------------------------- *
- * Intent classification
- * ---------------------------------------------------------------- */
-
 const COMPARE_RE = /\b(versus|vs\.?|compared? (?:to|with|against)|against|between|and)\b/i;
 const RANK_RE = /\b(best|worst|highest|lowest|top|bottom|leader|strongest|weakest|which (?:company|one|name)|who has)\b/i;
 const TREND_RE = /\b(trend\w*|over time|histor\w+|movement|moved|trajectory|growth over|last \w+ (?:years|quarters)|by year|by quarter|each year|each quarter|since \d{4})\b/i;
@@ -154,7 +117,6 @@ export function parseQuestion(raw: string): ParsedQuestion {
 
   const companies = resolveCompanies(q, raw);
 
-  // Longest metric term first, so "operating margin" is not eaten by "margin".
   const metrics: MetricDef[] = [];
   const sortedMetrics = [...METRICS].sort(
     (a, b) => Math.max(...b.terms.map((t) => t.length)) - Math.max(...a.terms.map((t) => t.length)),
@@ -182,10 +144,6 @@ export function parseQuestion(raw: string): ParsedQuestion {
   else if (EXPLAIN_RE.test(raw)) intent = "explain";
   else if (metrics.length > 0 || companies.length > 0) intent = "metric";
 
-  // The trained router decides where it is confident, and hands back to the
-  // rules where it is not. On held out phrasings the combination scores higher
-  // than either alone: the rules remain better on plain measure lookups, the
-  // model is far better on everything else.
   const prediction = classifyIntent(placeholderForm(q, companies, metrics), {
     companies: companies.length,
     metrics: metrics.length,
@@ -198,13 +156,6 @@ export function parseQuestion(raw: string): ParsedQuestion {
   return { raw, intent, companies, metrics, subsector, superlative };
 }
 
-/**
- * Rewrites the question with company and measure mentions replaced.
- *
- * The classifier is trained on this form. Leaving the names in would let it
- * key on the companies that happened to appear in the training corpus, and it
- * would then misroute every question about a name it had not seen.
- */
 function placeholderForm(q: string, companies: Company[], metrics: MetricDef[]): string {
   let out = q;
 

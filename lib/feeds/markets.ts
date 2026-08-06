@@ -1,8 +1,3 @@
-/**
- * Equity quotes and price history from the Yahoo chart endpoint.
- * query2 first, query1 as fallback: the limits are applied per host.
- */
-
 import { cached } from "@/lib/core/cache";
 import {
   MARKET_SNAPSHOT_QUOTES,
@@ -18,20 +13,9 @@ import type {
 } from "@/lib/core/types";
 import { nowIso } from "@/lib/core/types";
 
-// Eight minutes rather than one. This is a diligence console, not a trading
-// terminal: a quote a few minutes old changes no conclusion drawn here, and the
-// free Yahoo endpoint rate limits hard enough on burst that a short TTL costs
-// far more in blanked panels than it buys in freshness.
 const QUOTE_TTL_MS = 8 * 60 * 1000;
 const SERIES_TTL_MS = 60 * 60 * 1000;
 
-/**
- * Last known good quote per symbol, never expired.
- *
- * Yahoo applies an IP-level rate limit that can persist for minutes. During
- * that window a stale figure labelled with its retrieval time beats an empty
- * table. Symbols that have never resolved have no entry and render "Not set".
- */
 const lastGood = new Map<string, { quote: Quote; at: number }>();
 
 interface YahooChart {
@@ -169,8 +153,6 @@ export async function getQuote(symbol: string): Promise<Envelope<Quote>> {
       };
     }
 
-    // Last tier: the committed snapshot, taken where the endpoint answered.
-    // Labelled baseline and dated, never presented as a live price.
     const snap = MARKET_SNAPSHOT_QUOTES[symbol];
     if (snap && MARKET_SNAPSHOT_TAKEN) {
       return {
@@ -195,11 +177,6 @@ export interface QuoteResult {
   error: string | null;
 }
 
-/**
- * Bounded concurrency with a fixed gap between launches.
- * Yahoo rate limits on burst; serial with a half-second gap stays inside it.
- * Cost is paid once per cache period, not per page view.
- */
 export async function throttledMap<T, R>(
   items: T[],
   worker: (item: T) => Promise<R>,
@@ -230,11 +207,6 @@ export async function throttledMap<T, R>(
   return results;
 }
 
-/**
- * Fetches many symbols. A symbol that fails yields a null quote with its error
- * text rather than collapsing the whole batch, so one delisted ticker cannot
- * blank the peer table.
- */
 export async function getQuotes(symbols: string[]): Promise<{
   results: QuoteResult[];
   provenance: Provenance;
@@ -331,11 +303,6 @@ async function getSeriesLive(
   };
 }
 
-/**
- * Rebases a series to 100 at its first point so instruments priced in
- * different currencies can share one axis. Without this, plotting TCS at
- * ₹2,460 against Accenture at $166 makes the second line a flat floor.
- */
 export function rebase(points: SeriesPoint[]): Array<{ t: number; v: number }> {
   if (points.length === 0) return [];
   const base = points[0].close;

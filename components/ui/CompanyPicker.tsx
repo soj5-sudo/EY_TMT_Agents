@@ -3,13 +3,6 @@
 import { useMemo, useState } from "react";
 import { UNIVERSE, SECTORS, type Company } from "@/lib/data/universe";
 
-/**
- * Subject selector.
- *
- * Reported statements come from the SEC, so only registrants are offered.
- * Companies listed outside the US are shown but marked, because a user picking
- * one and getting an empty dashboard would reasonably assume the tool is broken.
- */
 export function CompanyPicker({
   value,
   onChange,

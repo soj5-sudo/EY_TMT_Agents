@@ -1,22 +1,3 @@
-/**
- * Company filings.
- *
- * Discovers and parses the TCS quarterly fact sheet directly from the investor
- * relations content path. Two details make this work where a naive fetch does
- * not, both established by testing rather than assumption:
- *
- *   1. tcs.com returns 403 to a bare client and 200 to a full browser header
- *      set. The header block lives in lib/core/fetcher.
- *   2. The documents are AES-256 encrypted with an empty user password, so the
- *      text has to be decrypted before it can be inflated. That is handled in
- *      lib/pdf/extract.
- *
- * The URL pattern is stable across quarters:
- *   .../financial-statements/{fy}/q{n}/Presentations/Q{n} {fy} Fact Sheet.pdf
- * where fy is the Indian fiscal year label, for example 2026-27 for the year
- * beginning April 2026.
- */
-
 import { cached } from "@/lib/core/cache";
 import { fetchBuffer, safeFetch } from "@/lib/core/fetcher";
 import { extractPdfText, PdfParseError } from "@/lib/pdf/extract";
@@ -33,22 +14,11 @@ export interface FilingRef {
   url: string;
 }
 
-/**
- * Builds candidate fact-sheet references newest first.
- *
- * Indian fiscal years run April to March. A quarter's fact sheet lands roughly
- * three to four weeks after the quarter closes, so the newest candidate is the
- * quarter that ended most recently.
- */
 export function candidateFilings(now = new Date(), count = 6): FilingRef[] {
   const month = now.getUTCMonth(); // 0 = January
   const year = now.getUTCFullYear();
 
-  // Fiscal year in which `now` falls. January to March belongs to the prior
-  // fiscal year label.
   let fyStart = month >= 3 ? year : year - 1;
-  // Quarter index that has most recently closed and been reported.
-  // Apr-Jun = Q1 reported from July, and so on.
   let q: 1 | 2 | 3 | 4;
   if (month >= 6 && month <= 8) q = 1;
   else if (month >= 9 && month <= 11) q = 2;
@@ -56,9 +26,7 @@ export function candidateFilings(now = new Date(), count = 6): FilingRef[] {
   else if (month >= 3 && month <= 5) q = 4;
   else q = 1;
 
-  // Q4 is reported in April to June and belongs to the previous fiscal year.
   if (q === 4) fyStart -= 1;
-  // Q3 is reported in January to March, which is inside the same fiscal year.
 
   const refs: FilingRef[] = [];
   for (let i = 0; i < count; i++) {
@@ -73,7 +41,6 @@ export function candidateFilings(now = new Date(), count = 6): FilingRef[] {
         `${fy}/q${q}/Presentations/${encodeURIComponent(filename)}`,
     });
 
-    // Step one quarter back.
     if (q === 1) {
       q = 4;
       fyStart -= 1;
@@ -85,7 +52,6 @@ export function candidateFilings(now = new Date(), count = 6): FilingRef[] {
   return refs;
 }
 
-/** Probes candidates and returns the newest that actually resolves. */
 export async function discoverLatestFiling(): Promise<FilingRef> {
   const res = await cached("filing:latest", DISCOVERY_TTL_MS, async () => {
     const candidates = candidateFilings();
@@ -95,7 +61,6 @@ export async function discoverLatestFiling(): Promise<FilingRef> {
       try {
         const head = await safeFetch(ref.url, { timeoutMs: 9000, retries: 0 });
         const type = head.headers.get("content-type") ?? "";
-        // Consume the body so the socket is released.
         await head.arrayBuffer();
         if (type.includes("pdf")) return ref;
         errors.push(`${ref.label}: unexpected content-type ${type}`);
@@ -113,10 +78,6 @@ export async function discoverLatestFiling(): Promise<FilingRef> {
 
   return res.value;
 }
-
-/* ------------------------------------------------------------------ *
- * Structured parse
- * ------------------------------------------------------------------ */
 
 export interface SegmentParse {
   label: string;
@@ -143,7 +104,6 @@ export interface FactSheetParse {
   };
   geography: SegmentParse[];
   verticals: SegmentParse[];
-  /** Every extracted line, kept for the retrieval index. */
   lines: string[];
   meta: {
     pageCount: number;
@@ -154,7 +114,6 @@ export interface FactSheetParse {
   };
 }
 
-/** Parses "1,234.5" and "- 0.4" (the filings space the minus sign). */
 function num(raw: string | undefined | null): number | null {
   if (!raw) return null;
   const cleaned = raw.replace(/\s+/g, "").replace(/,/g, "");
@@ -170,12 +129,6 @@ function firstMatch(lines: string[], re: RegExp): RegExpMatchArray | null {
   return null;
 }
 
-/**
- * Reads a segment table row such as:
- *   "North America   48.7   48.5   48.3   - 0.4    2.0    1.7    13.0"
- * Requires at least five numeric columns so prose lines that happen to
- * contain the label are not mistaken for table rows.
- */
 function parseSegmentRow(lines: string[], label: string): SegmentParse | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`^\\s*${escaped}\\s+([-\\d.,\\s]+)$`, "i");
@@ -217,9 +170,6 @@ export function parseFactSheet(
   ref: FilingRef,
   meta: FactSheetParse["meta"],
 ): FactSheetParse {
-  // The rupee glyph does not survive the subset-font mapping in these decks and
-  // renders as a dollar sign, so the currency symbol is not used as an anchor.
-  // The "INR Revenue of" / "USD Revenue of" prefixes are what disambiguate.
   const inrRev = firstMatch(
     lines,
     /INR Revenue of\s*\D{0,3}\s*([\d,]+)\s*Mn,\s*(?:up|down)?\s*(-?[\d.]+)%\s*QoQ\s*\|\s*(?:up|down)?\s*(-?[\d.]+)%\s*YoY/i,
@@ -275,12 +225,6 @@ export function parseFactSheet(
   };
 }
 
-/**
- * How much of the expected structure the parse actually recovered.
- * The agent uses this to decide whether to trust the parse or fall back to the
- * checked-in baseline, which is what stops a format change upstream from
- * quietly filling the dashboard with nulls.
- */
 export function parseConfidence(parsed: FactSheetParse): {
   score: number;
   recovered: number;
@@ -307,10 +251,6 @@ export function parseConfidence(parsed: FactSheetParse): {
     missing: checks.filter(([, ok]) => !ok).map(([name]) => name),
   };
 }
-
-/* ------------------------------------------------------------------ *
- * Entry point
- * ------------------------------------------------------------------ */
 
 export async function getLatestFactSheet(): Promise<Envelope<FactSheetParse>> {
   const ref = await discoverLatestFiling();

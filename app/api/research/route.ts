@@ -19,8 +19,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: input.error }, { status: 400 });
   }
 
-  // Company names are letters, digits and a small punctuation set. Anything
-  // else is a probe rather than a query.
   if (!/^[\p{L}\p{N}\s.,&'()\-]+$/u.test(input.value)) {
     return NextResponse.json(
       { error: "Enter a company name using letters, numbers and basic punctuation." },
@@ -44,7 +42,6 @@ export async function POST(request: Request) {
   }
 }
 
-/** Type-ahead resolution for the company field. */
 export async function GET(request: Request) {
   const q = new URL(request.url).searchParams.get("q") ?? "";
   const input = sanitizeUserInput(q, 80, "Company name");

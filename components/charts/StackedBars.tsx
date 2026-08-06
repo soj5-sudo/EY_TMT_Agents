@@ -12,15 +12,6 @@ import {
   useTooltip,
 } from "./kit";
 
-/**
- * Stacked columns as a share of the total.
- *
- * Used for expense composition, where the question is not how large each line
- * is in absolute terms but whether its share of revenue is drifting. Stacking
- * absolutes would let a revenue increase disguise a cost line that is growing
- * faster than the business.
- */
-
 export interface StackSeries {
   key: string;
   label: string;

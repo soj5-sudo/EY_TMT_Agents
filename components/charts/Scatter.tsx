@@ -245,3 +245,216 @@ export function ScatterQuadrant({
     </ChartFrame>
   );
 }
+
+/**
+ * Positioning plot.
+ *
+ * Scale against profitability, the pairing a peer set exists to show: the same
+ * margin means something different at two hundred million of revenue than at
+ * eight billion, and two sorted columns never make that visible. No quadrant
+ * lines here, because a peer universe drawn from mixed reporting periods has no
+ * average worth ruling a line through.
+ */
+
+export interface PositionPoint {
+  label: string;
+  x: number;
+  y: number;
+  highlight?: boolean;
+  group?: string;
+}
+
+const LABEL_LIMIT = 12;
+
+/**
+ * padDomain widens a domain of one value, which is what a single point or a
+ * column of identical figures produces, so the scale span is never zero. The
+ * clamp keeps the padding from carrying an axis below zero when nothing
+ * reported is negative: a revenue axis starting under zero invents peers.
+ */
+function axisDomain(values: number[]): [number, number] {
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const [padLo, padHi] = padDomain(lo, hi, 0.1);
+  return [lo >= 0 ? Math.max(0, padLo) : padLo, padHi];
+}
+
+export function Scatter({
+  points,
+  xLabel,
+  yLabel,
+  formatX,
+  formatY,
+}: {
+  points: PositionPoint[];
+  xLabel: string;
+  yLabel: string;
+  formatX: (v: number) => string;
+  formatY: (v: number) => string;
+}) {
+  const plotted = points.filter(
+    (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
+  );
+
+  if (plotted.length === 0) {
+    return (
+      <div className="empty">
+        <p className="empty-title">Nothing to position</p>
+        <p className="empty-body">
+          {points.length === 0
+            ? "No companies were passed for this view."
+            : "None of the companies passed carry a figure on both axes."}
+        </p>
+      </div>
+    );
+  }
+
+  const width = 760;
+  const height = 420;
+  const m = { top: 18, right: 30, bottom: 48, left: 68 };
+  const plotW = width - m.left - m.right;
+  const plotH = height - m.top - m.bottom;
+
+  const xDomain = axisDomain(plotted.map((p) => p.x));
+  const yDomain = axisDomain(plotted.map((p) => p.y));
+
+  const x = linearScale(xDomain, [m.left, m.left + plotW]);
+  const y = linearScale(yDomain, [m.top + plotH, m.top]);
+
+  const xTicks = [xDomain[0], (xDomain[0] + xDomain[1]) / 2, xDomain[1]];
+  const yTicks = [yDomain[0], (yDomain[0] + yDomain[1]) / 2, yDomain[1]];
+
+  // Past a dozen points the labels overlap into noise, so only the selection
+  // keeps its name and the rest are read by hovering.
+  const named = plotted.length < LABEL_LIMIT;
+
+  // Selected dots are drawn last so nothing is painted over them.
+  const ordered = [...plotted].sort(
+    (a, b) => Number(a.highlight ?? false) - Number(b.highlight ?? false),
+  );
+
+  return (
+    <figure style={{ margin: 0 }}>
+      <svg
+        className="chart-svg"
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-label={`${xLabel} against ${yLabel} for ${plotted.length} companies.`}
+      >
+        <g aria-hidden="true">
+          {yTicks.map((t) => (
+            <line
+              key={`h${t}`}
+              x1={m.left}
+              x2={m.left + plotW}
+              y1={y(t)}
+              y2={y(t)}
+              stroke="var(--ey-grey-pale)"
+              strokeWidth={1}
+              shapeRendering="crispEdges"
+            />
+          ))}
+          {xTicks.map((t) => (
+            <line
+              key={`v${t}`}
+              y1={m.top}
+              y2={m.top + plotH}
+              x1={x(t)}
+              x2={x(t)}
+              stroke="var(--ey-grey-pale)"
+              strokeWidth={1}
+              shapeRendering="crispEdges"
+            />
+          ))}
+        </g>
+
+        <g aria-hidden="true">
+          {yTicks.map((t) => (
+            <text
+              key={`y${t}`}
+              className="chart-tick"
+              x={m.left - 8}
+              y={y(t)}
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {formatY(t)}
+            </text>
+          ))}
+          {xTicks.map((t) => (
+            <text
+              key={`x${t}`}
+              className="chart-tick"
+              x={x(t)}
+              y={m.top + plotH + 18}
+              textAnchor="middle"
+            >
+              {formatX(t)}
+            </text>
+          ))}
+        </g>
+
+        {ordered.map((p, i) => {
+          const on = p.highlight === true;
+          const r = on ? 11 : 6;
+          return (
+            <g key={`${p.label}-${i}`}>
+              <circle
+                cx={x(p.x)}
+                cy={y(p.y)}
+                r={r}
+                fill={on ? "var(--accent)" : "var(--ey-charcoal)"}
+                fillOpacity={on ? 1 : 0.55}
+                stroke={on ? "var(--ey-charcoal)" : undefined}
+                strokeWidth={on ? 1 : undefined}
+              >
+                <title>
+                  {`${p.label}${p.group ? `, ${p.group}` : ""}. ${xLabel}: ${formatX(p.x)}. ${yLabel}: ${formatY(p.y)}.`}
+                </title>
+              </circle>
+              {(on || named) && (
+                <text
+                  className="chart-tick"
+                  x={x(p.x)}
+                  y={y(p.y) - r - 6}
+                  textAnchor="middle"
+                  style={{
+                    fill: on ? "var(--text-primary)" : "var(--text-muted)",
+                    fontWeight: on ? 600 : 400,
+                  }}
+                  aria-hidden="true"
+                >
+                  {p.label.length > 22 ? `${p.label.slice(0, 21)}…` : p.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+
+        <g className="chart-axis" aria-hidden="true">
+          <line x1={m.left} x2={m.left + plotW} y1={m.top + plotH} y2={m.top + plotH} />
+          <line x1={m.left} x2={m.left} y1={m.top} y2={m.top + plotH} />
+        </g>
+
+        <text
+          className="chart-tick"
+          x={m.left + plotW / 2}
+          y={height - 10}
+          textAnchor="middle"
+          aria-hidden="true"
+        >
+          {xLabel}
+        </text>
+        <text
+          className="chart-tick"
+          transform={`translate(16, ${m.top + plotH / 2}) rotate(-90)`}
+          textAnchor="middle"
+          aria-hidden="true"
+        >
+          {yLabel}
+        </text>
+      </svg>
+    </figure>
+  );
+}

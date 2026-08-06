@@ -90,6 +90,9 @@ export interface NewsItem {
   publisherDomain: string;
   /** 1 primary and wire, 2 financial press, 3 trade press. */
   publisherTier: 1 | 2 | 3;
+  /** False when the outlet is not on the reviewed publisher list. Only a
+   *  direct search returns these, and the interface marks them. */
+  verified?: boolean;
   publishedAt: string | null;
   /** Which watchlist query surfaced this item. */
   topic: string;

@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/", label: "Sector signal" },
   { href: "/dashboard/financials", label: "Quarterly P&L" },
   { href: "/dashboard/kpi", label: "KPI detail" },
+  { href: "/dashboard/tracker", label: "IT services tracker" },
   { href: "/research", label: "Research" },
   { href: "/agents", label: "Diligence OS" },
 ];

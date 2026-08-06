@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ledgerFor, seriesFor } from "@/lib/brain/ledger";
+import { annualise, ledgerFor, ledgerPeriodsPerYear, seriesFor } from "@/lib/brain/ledger";
 import { METRICS, type MetricKey } from "@/lib/brain/intent";
 import { findCompany, UNIVERSE, type Company } from "@/lib/data/universe";
 import type { Provenance } from "@/lib/core/types";
@@ -119,10 +119,19 @@ export async function GET(request: Request) {
           return { ...base, provenance, unavailable: unavailable ?? c.coverageNote ?? null };
         }
 
+        // A company publishing quarters has its flows and growth put on an
+        // annual footing, or the column beside an annual filer understates it
+        // fourfold and reads as a real difference.
+        const ppy = ledgerPeriodsPerYear(ledger);
+
         const measures: CompareSeries[] = [];
         for (const m of METRICS) {
-          const points = seriesFor(ledger, m.key);
-          if (points.length === 0) continue;
+          const raw = seriesFor(ledger, m.key);
+          if (raw.length === 0) continue;
+          const points =
+            ppy === 1
+              ? raw
+              : raw.map((p) => ({ label: p.label, value: annualise(m.key, p.value, ppy) }));
           measures.push({
             key: m.key,
             label: m.label,
@@ -163,7 +172,8 @@ export async function GET(request: Request) {
       unresolved,
       note:
         "Every figure is the last point of the series computed from the company's own filed or published record. " +
-        "Where two companies report on different bases, the period is shown against each so the comparison is not read as like for like when it is not.",
+        "A company publishing quarters has its revenue and growth put on an annual footing so the columns are comparable; ratios need no adjustment. " +
+        "The period is shown against every figure, so a comparison across different year ends is not read as like for like when it is not.",
     },
     { headers: { "Cache-Control": "no-store" } },
   );

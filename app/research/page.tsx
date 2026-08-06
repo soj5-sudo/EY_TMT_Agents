@@ -6,6 +6,7 @@ import { Delta, NotSet, PageHeader, Panel, Prov, Stack, StatBlock, StatRow } fro
 import { SourceList } from "@/components/ui/SourceList";
 import type { AgentFinding, NewsItem, Provenance, Quote } from "@/lib/core/types";
 import { useDocuments } from "@/lib/client/documents";
+import { Benchmark } from "@/components/dashboards/Benchmark";
 import { Compare } from "@/components/dashboards/Compare";
 import { apiFetch } from "@/lib/client/api";
 
@@ -189,6 +190,8 @@ export default function ResearchPage() {
             </div>
           </form>
         </Panel>
+
+        <Benchmark />
 
         <Compare />
 

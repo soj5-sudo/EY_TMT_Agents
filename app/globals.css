@@ -2013,3 +2013,104 @@ button.source-tag {
   .filter-row-label { flex: none; }
   .filter-search { flex-wrap: wrap; }
 }
+
+/* A count inside a filter chip, so the reader knows the size of a slice
+   before spending a click on it. */
+.chip-count {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid currentColor;
+  opacity: 0.55;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- *
+ * Positioning
+ *
+ * A rank alone hides whether the subject is narrowly behind the leader
+ * or a long way off, and in a pitch those are different conversations.
+ * The strip puts every name on the same axis so the gap is visible.
+ * ---------------------------------------------------------------- */
+
+.bm-head {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.bm-subject {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  margin: 4px 0 2px;
+  line-height: 1.2;
+}
+
+.bm-cohort {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  margin: 6px 0 0;
+  color: var(--ey-grey);
+}
+
+.bm-standing {
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 14px;
+  display: grid;
+  gap: 4px;
+}
+
+.bm-standing p { margin: 0; font-size: 0.875rem; }
+
+.bm-strip {
+  position: relative;
+  height: 18px;
+  width: 100%;
+  min-width: 140px;
+}
+
+.bm-axis {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--ey-grey-light);
+}
+
+.bm-median {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 1px;
+  background: var(--ey-grey);
+  transform: translateX(-0.5px);
+}
+
+.bm-dot {
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--ey-grey-light);
+}
+
+.bm-dot[data-subject="true"] {
+  width: 11px;
+  height: 11px;
+  margin-top: -5.5px;
+  margin-left: -5.5px;
+  background: var(--accent);
+  border: 1.5px solid var(--ey-charcoal);
+  z-index: 2;
+}
+
+.bm-table td[data-best="true"],
+.bm-table .tnum[data-best="true"] {
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 var(--accent);
+}

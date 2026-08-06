@@ -139,6 +139,13 @@ export const THEME_LABELS: Record<Theme, string> = {
 
 export const SECTORS: Sector[] = ["Technology", "Media", "Telecom"];
 
+/**
+ * Listing regions, in the order the dashboards offer them. India carries the
+ * cohort this console is built around, so it sits with the two western blocs
+ * rather than behind them in an alphabetical list nobody reads to the end of.
+ */
+export const REGIONS: Company["region"][] = ["US", "Europe", "India", "Asia"];
+
 export function bySector(sector: Sector): Company[] {
   return UNIVERSE.filter((c) => c.sector === sector);
 }

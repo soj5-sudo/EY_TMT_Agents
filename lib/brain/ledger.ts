@@ -139,6 +139,35 @@ function basisOf(ledger: FactLedger): Basis | null {
 }
 
 /**
+ * Reporting periods in a year for this ledger: one where the company files
+ * years, four where it publishes quarters. A caller comparing one company
+ * against another has to know, because a quarter of revenue set beside a full
+ * year of it is not a comparison, and the two look identical once the label is
+ * dropped.
+ */
+export function ledgerPeriodsPerYear(ledger: FactLedger): number {
+  return basisOf(ledger)?.periodsPerYear ?? 1;
+}
+
+/**
+ * Puts a measure on an annual footing.
+ *
+ * A flow accumulates, so a quarter of it is multiplied up. A growth rate
+ * compounds, so it is raised rather than multiplied. A ratio, a day count and
+ * a headcount are already basis neutral and are returned untouched.
+ */
+export function annualise(
+  key: MetricKey,
+  value: number,
+  periodsPerYear: number,
+): number {
+  if (periodsPerYear === 1) return value;
+  if (key === "revenue") return value * periodsPerYear;
+  if (key === "revenueGrowth") return (Math.pow(1 + value / 100, periodsPerYear) - 1) * 100;
+  return value;
+}
+
+/**
  * Computes one measure across every reported period.
  *
  * Returns the series rather than a single value, because the level and the

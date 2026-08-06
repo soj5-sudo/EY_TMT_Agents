@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Donut } from "@/components/charts/Donut";
 import { QuarterBars } from "@/components/charts/QuarterBars";
 import { Scatter } from "@/components/charts/Scatter";
+import { SectorHistory } from "@/components/dashboards/SectorHistory";
 import { PageHeader, Panel, Prov, Stack, StatBlock, StatRow } from "@/components/ui/Bits";
 import type { Provenance } from "@/lib/core/types";
 import { apiFetch } from "@/lib/client/api";
@@ -689,6 +690,8 @@ export function SectorTracker({
             </Panel>
           </>
         )}
+              <SectorHistory />
+
       </Stack>
 
       <div style={{ height: 64 }} />

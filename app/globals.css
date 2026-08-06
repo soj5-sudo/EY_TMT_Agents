@@ -2296,3 +2296,12 @@ button.source-tag {
     display: none;
   }
 }
+
+.pe-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.pe-name { flex: 0 0 150px; font-size: 12px; color: var(--ey-charcoal); }
+.pe-track { position: relative; flex: 1 1 auto; height: 12px; background: var(--ey-grey-pale); }
+.pe-fill { position: absolute; inset: 0 auto 0 0; background: var(--ey-charcoal); }
+.pe-fill[data-negative="true"] { background: var(--ey-grey); }
+.pe-first { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); }
+.pe-val { flex: 0 0 72px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .pe-name { flex-basis: 96px; } }

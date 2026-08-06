@@ -25,3 +25,4 @@ scraper/*.log
 # Agent scratch files. Engineering notes live in Soham-Jariwala.md.
 CLAUDE.md
 AGENTS.md
+docs/

@@ -1,21 +1,3 @@
-/**
- * Trains the intent classifier.
- *
- * Run with:
- *   node --experimental-strip-types --import ./scripts/alias.mjs scripts/train-intent.mts
- *
- * The corpus is generated from template families rather than collected, and
- * that is stated plainly in the model metadata: there is no log of real
- * questions to learn from, and inventing one would be worse than declaring a
- * synthetic one. What makes the evaluation meaningful is that whole families
- * are held out, so the test set is phrased in ways the model never saw. A
- * split over individual examples would measure memorisation and report a
- * number close to one, which would be true and useless.
- *
- * The regex router is scored on the identical held-out set, so the comparison
- * says whether learning this actually beats the rules it replaces.
- */
-
 import { writeFileSync } from "node:fs";
 import { UNIVERSE } from "@/lib/data/universe";
 import { METRICS, parseQuestion } from "@/lib/brain/intent";
@@ -25,16 +7,10 @@ type Intent = "metric" | "compare" | "rank" | "trend" | "explain" | "product";
 
 interface Family {
   intent: Intent;
-  /** Slots: {co} {co2} {metric} {sub} {years}. */
   patterns: string[];
 }
 
-/* ------------------------------------------------------------------ *
- * Template families
- * ------------------------------------------------------------------ */
-
 const FAMILIES: Family[] = [
-  // --- metric ------------------------------------------------------
   { intent: "metric", patterns: ["what is {co}'s {metric}", "what is the {metric} of {co}"] },
   { intent: "metric", patterns: ["{co} {metric}", "{metric} for {co}", "{metric} {co}"] },
   { intent: "metric", patterns: ["how much {metric} does {co} have", "how much {metric} did {co} report"] },
@@ -46,7 +22,6 @@ const FAMILIES: Family[] = [
   { intent: "metric", patterns: ["where does {co} sit on {metric}", "what level is {co}'s {metric} at"] },
   { intent: "metric", patterns: ["{metric} at {co} please", "{co} {metric} figure"] },
 
-  // --- compare -----------------------------------------------------
   { intent: "compare", patterns: ["{co} versus {co2} on {metric}", "{co} vs {co2} {metric}"] },
   { intent: "compare", patterns: ["compare {co} and {co2} on {metric}", "compare the {metric} of {co} and {co2}"] },
   { intent: "compare", patterns: ["how does {co} compare to {co2} on {metric}", "how does {co}'s {metric} compare with {co2}"] },
@@ -56,7 +31,6 @@ const FAMILIES: Family[] = [
   { intent: "compare", patterns: ["put {co} next to {co2} on {metric}", "line up {co} and {co2} by {metric}"] },
   { intent: "compare", patterns: ["which is stronger on {metric}, {co} or {co2}", "who wins on {metric}, {co} or {co2}"] },
 
-  // --- rank --------------------------------------------------------
   { intent: "rank", patterns: ["which company has the best {metric}", "which name has the highest {metric}"] },
   { intent: "rank", patterns: ["who has the worst {metric}", "who has the lowest {metric}"] },
   { intent: "rank", patterns: ["rank the {sub} names by {metric}", "rank {sub} on {metric}"] },
@@ -66,7 +40,6 @@ const FAMILIES: Family[] = [
   { intent: "rank", patterns: ["strongest {metric} in the sector", "weakest {metric} in the sector"] },
   { intent: "rank", patterns: ["who leads on {metric}", "who is behind on {metric}"] },
 
-  // --- trend -------------------------------------------------------
   { intent: "trend", patterns: ["how has {co}'s {metric} moved", "how has {metric} moved at {co}"] },
   { intent: "trend", patterns: ["{co} {metric} over time", "{metric} at {co} over the last {years} years"] },
   { intent: "trend", patterns: ["{co} {metric} trend", "trend in {co}'s {metric}"] },
@@ -78,7 +51,6 @@ const FAMILIES: Family[] = [
   { intent: "trend", patterns: ["plot {metric} for {co}", "chart {co} {metric} over {years} years"] },
   { intent: "trend", patterns: ["is {co}'s {metric} going up or down", "which direction is {co} {metric} moving"] },
 
-  // --- explain -----------------------------------------------------
   { intent: "explain", patterns: ["why did {co}'s {metric} fall", "why did {metric} drop at {co}"] },
   { intent: "explain", patterns: ["what is driving {co}'s {metric}", "what drove the change in {co} {metric}"] },
   { intent: "explain", patterns: ["explain {co}'s {metric}", "explain the {metric} at {co}"] },
@@ -88,7 +60,6 @@ const FAMILIES: Family[] = [
   { intent: "explain", patterns: ["help me understand {co}'s {metric}", "walk me through {metric} at {co}"] },
   { intent: "explain", patterns: ["how should i read {co}'s {metric}", "what should i take from {co} {metric}"] },
 
-  // --- product -----------------------------------------------------
   { intent: "product", patterns: ["what does this dashboard do", "what is this console for"] },
   { intent: "product", patterns: ["where does the data come from", "what are your sources"] },
   { intent: "product", patterns: ["how do the agents work", "what do the agents do"] },
@@ -99,25 +70,21 @@ const FAMILIES: Family[] = [
   { intent: "product", patterns: ["can i export to excel", "how do i download the data"] },
   { intent: "product", patterns: ["what is a workstream", "explain the workstreams"] },
 
-  // --- metric, colloquial and elliptical ---------------------------
   { intent: "metric", patterns: ["{metric} on {co}", "read me {co} {metric}"] },
   { intent: "metric", patterns: ["what number does {co} put on {metric}", "what is {co} carrying for {metric}"] },
   { intent: "metric", patterns: ["{co} {metric} right now", "as things stand what is {co} {metric}"] },
   { intent: "metric", patterns: ["quote me {co}'s {metric}", "state the {metric} for {co}"] },
 
-  // --- compare, colloquial -----------------------------------------
   { intent: "compare", patterns: ["{co} or {co2} on {metric}", "{co} against {co2}, {metric}"] },
   { intent: "compare", patterns: ["side by side {metric} for {co} and {co2}", "benchmark {co} to {co2} on {metric}"] },
   { intent: "compare", patterns: ["how far apart are {co} and {co2} on {metric}", "spread between {co} and {co2} {metric}"] },
   { intent: "compare", patterns: ["stack {co} up against {co2} on {metric}", "measure {co} against {co2} on {metric}"] },
 
-  // --- rank, colloquial --------------------------------------------
   { intent: "rank", patterns: ["best {metric} anywhere", "worst {metric} anywhere"] },
   { intent: "rank", patterns: ["give me the top names on {metric}", "list the bottom names on {metric}"] },
   { intent: "rank", patterns: ["who is top of the table for {metric}", "who sits bottom on {metric}"] },
   { intent: "rank", patterns: ["highest {metric} in {sub}", "lowest {metric} in {sub}"] },
 
-  // --- trend, colloquial and imperative ----------------------------
   { intent: "trend", patterns: ["plot {co} {metric}", "graph {metric} for {co}"] },
   { intent: "trend", patterns: ["is {metric} rising at {co}", "is {metric} falling at {co}"] },
   { intent: "trend", patterns: ["which way is {co} {metric} going", "what direction has {co} {metric} taken"] },
@@ -127,7 +94,6 @@ const FAMILIES: Family[] = [
   { intent: "trend", patterns: ["{metric} for {co} since {years} years ago", "{co} {metric} across the last {years} periods"] },
   { intent: "trend", patterns: ["give me the series for {co} {metric}", "the run of {metric} at {co}"] },
 
-  // --- explain, colloquial and imperative --------------------------
   { intent: "explain", patterns: ["help me understand {co}'s {metric}", "walk me through {metric} at {co}"] },
   { intent: "explain", patterns: ["how should i read {co}'s {metric}", "what should i take from {co} {metric}"] },
   { intent: "explain", patterns: ["what is behind {co}'s {metric}", "what accounts for {co}'s {metric}"] },
@@ -137,7 +103,6 @@ const FAMILIES: Family[] = [
   { intent: "explain", patterns: ["is {co}'s {metric} good or bad", "should i be worried about {co}'s {metric}"] },
   { intent: "explain", patterns: ["give me the reasoning on {co} {metric}", "justify {co}'s {metric}"] },
 
-  // --- product, colloquial -----------------------------------------
   { intent: "product", patterns: ["how does this thing work", "what am i looking at"] },
   { intent: "product", patterns: ["who built this", "what is this site"] },
   { intent: "product", patterns: ["is my upload stored", "what happens to files i upload"] },
@@ -145,10 +110,6 @@ const FAMILIES: Family[] = [
   { intent: "product", patterns: ["can i trust these numbers", "how do you verify the data"] },
   { intent: "product", patterns: ["what does provenance mean here", "how do i see the source"] },
 
-  // --- explain, the core markers used across many constructions -----
-  // Written deliberately so that no single marker word lives in only one
-  // family. Holding out a family must not remove a marker from training
-  // altogether, which is what made "why" invisible to an earlier model.
   { intent: "explain", patterns: ["why has {co}'s {metric} moved", "why has {metric} shifted at {co}"] },
   { intent: "explain", patterns: ["why does {co} have such a {metric}", "why is {co} carrying that {metric}"] },
   { intent: "explain", patterns: ["any idea why {co}'s {metric} changed", "do you know why {metric} moved at {co}"] },
@@ -160,7 +121,6 @@ const FAMILIES: Family[] = [
   { intent: "explain", patterns: ["why so high on {metric} at {co}", "why so low on {metric} at {co}"] },
   { intent: "explain", patterns: ["what explains {co}'s {metric}", "what would explain {metric} at {co}"] },
 
-  // --- trend, the core markers used across many constructions -------
   { intent: "trend", patterns: ["what is the trajectory of {co}'s {metric}", "trajectory of {metric} at {co}"] },
   { intent: "trend", patterns: ["is {co}'s {metric} up or down", "up or down on {metric} at {co}"] },
   { intent: "trend", patterns: ["the trend of {metric} at {co}", "trending {metric} for {co}"] },
@@ -172,29 +132,19 @@ const FAMILIES: Family[] = [
   { intent: "trend", patterns: ["has {metric} risen or fallen at {co}", "did {metric} rise or fall at {co}"] },
   { intent: "trend", patterns: ["show the progression of {co}'s {metric}", "progression of {metric} at {co}"] },
 
-  // --- metric, guarded against being read as a comparison -----------
   { intent: "metric", patterns: ["where does {co} stand on {metric}", "what position is {co} in on {metric}"] },
   { intent: "metric", patterns: ["{metric} reported by {co}", "the {metric} {co} reported"] },
   { intent: "metric", patterns: ["what is {co} on for {metric}", "what is {co} running at on {metric}"] },
 
-  // --- rank, guarded against being read as product ------------------
   { intent: "rank", patterns: ["highest {metric} of any name", "lowest {metric} of any name"] },
   { intent: "rank", patterns: ["best {metric} in the universe", "worst {metric} in the universe"] },
 
-  // --- compare, guarded against being read as metric ----------------
   { intent: "compare", patterns: ["{metric} for {co} versus {co2}", "{metric} at {co} against that of {co2}"] },
   { intent: "compare", patterns: ["set {co} beside {co2} on {metric}", "weigh {co} against {co2} on {metric}"] },
 
-  // --- product, guarded against being read as rank ------------------
   { intent: "product", patterns: ["which companies are covered here", "what is in your coverage"] },
   { intent: "product", patterns: ["what can this tool do", "what questions can i ask"] },
 ];
-
-
-
-/* ------------------------------------------------------------------ *
- * Corpus generation
- * ------------------------------------------------------------------ */
 
 interface Example {
   raw: string;
@@ -204,7 +154,6 @@ interface Example {
   family: number;
 }
 
-/** Deterministic generator, so a rerun reproduces the same corpus exactly. */
 function makeRandom(seed: number): () => number {
   let s = seed >>> 0;
   return () => {
@@ -226,8 +175,6 @@ function build(): Example[] {
 
   FAMILIES.forEach((family, fi) => {
     for (const pattern of family.patterns) {
-      // Several fillings per pattern so the model sees the same shape with
-      // different names and measures and cannot key on either.
       for (let i = 0; i < 26; i++) {
         const co = pick(UNIVERSE);
         let co2 = pick(UNIVERSE);
@@ -273,10 +220,6 @@ function build(): Example[] {
   return out;
 }
 
-/* ------------------------------------------------------------------ *
- * Training
- * ------------------------------------------------------------------ */
-
 const LABELS: Intent[] = ["metric", "compare", "rank", "trend", "explain", "product"];
 
 function vectorise(examples: Example[], minCount: number) {
@@ -320,7 +263,6 @@ function train(
   const r = makeRandom(7);
 
   for (let epoch = 0; epoch < epochs; epoch++) {
-    // Shuffle so the class blocks in the generated corpus do not bias updates.
     for (let i = order.length - 1; i > 0; i--) {
       const j = Math.floor(r() * (i + 1));
       [order[i], order[j]] = [order[j], order[i]];
@@ -371,14 +313,8 @@ function accuracy(
   return right / data.length;
 }
 
-/* ------------------------------------------------------------------ *
- * Run
- * ------------------------------------------------------------------ */
-
 const all = build();
 
-// Hold out whole families, so the test set is phrased in ways training never
-// saw. Every intent keeps at least one family on each side of the split.
 const heldOutFamilies = new Set<number>();
 const byIntent = new Map<Intent, number[]>();
 FAMILIES.forEach((f, i) => {
@@ -386,10 +322,6 @@ FAMILIES.forEach((f, i) => {
 });
 const splitRand = makeRandom(4242);
 for (const [, idxs] of byIntent) {
-  // Shuffle before taking, because the families are written in order of how
-  // unusual their phrasing is. Taking the tail put every colloquial form in
-  // the test set and none in training, which measured nothing except that the
-  // corpus was ordered.
   const shuffled = [...idxs];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(splitRand() * (i + 1));
@@ -416,7 +348,6 @@ const { W, b } = train(trainRows, size, EPOCHS, 2.0, 2e-5);
 const trainAcc = accuracy(trainRows, W, b);
 const testAcc = accuracy(testRows, W, b);
 
-// The rules this replaces, scored on the identical held-out examples.
 let baselineRight = 0;
 for (const ex of testSet) {
   if (parseQuestion(ex.raw).intent === ex.label) baselineRight++;
@@ -426,7 +357,6 @@ const baseline = baselineRight / testSet.length;
 console.log(`train accuracy ${(trainAcc * 100).toFixed(1)}%`);
 console.log(`HELD OUT       ${(testAcc * 100).toFixed(1)}%   (regex baseline ${(baseline * 100).toFixed(1)}%)`);
 
-// Per class on the held-out set, so a single weak intent is visible.
 console.log("\nper class on held out:");
 for (let k = 0; k < LABELS.length; k++) {
   const subset = testRows.filter((r) => r.y === k);
@@ -443,10 +373,6 @@ for (let k = 0; k < LABELS.length; k++) {
   );
 }
 
-// The shipped policy is the model above a confidence floor and the rules
-// below it, so the number that matters is the combination rather than either
-// alone. The floor is chosen here against the held out set and reported, so
-// the figure carries the usual caveat that the threshold saw this data.
 function predictWith(ex: Example, floor: number): string {
   const cols: number[] = [];
   for (const f of new Set(features(ex.placeholder, ex.structure))) {
@@ -479,8 +405,6 @@ for (const floor of [0, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95]) {
 }
 console.log(`  chosen floor ${bestFloor.toFixed(2)} at ${(bestCombined * 100).toFixed(1)}%`);
 
-// Per family on the held out side, so a weak class can be traced to the exact
-// phrasings that fail rather than guessed at.
 console.log("\nheld out families:");
 for (const fi of [...heldOutFamilies].sort((a, b) => a - b)) {
   const subset = testSet.filter((e) => e.family === fi);

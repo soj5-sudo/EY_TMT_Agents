@@ -5,14 +5,6 @@ import { sanitizeUserInput } from "@/lib/security/sanitize";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/**
- * Open coverage search.
- *
- * The curated feed is a fixed set of standing queries, so a company outside
- * them has no coverage in it and searching the fetched set returns nothing
- * while the same search on the open web returns plenty. This asks the question
- * instead of filtering an answer to a different one.
- */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const raw = url.searchParams.get("q") ?? "";

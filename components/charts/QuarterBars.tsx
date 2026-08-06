@@ -1,14 +1,5 @@
 "use client";
 
-/**
- * Paired period bars.
- *
- * Two bars a row, one per period, because the question a quarterly tracker
- * answers is not how big a company is but which way it moved, and a single bar
- * cannot carry that. Rows are drawn in the order given: the useful sort differs
- * by measure, so the caller owns it.
- */
-
 export interface QuarterRow {
   label: string;
   prior: number | null;
@@ -49,8 +40,6 @@ export function QuarterBars({
     .flatMap((r) => [figure(r.prior), figure(r.latest)])
     .filter((v): v is number => v !== null);
 
-  // Bars run from zero, so the domain always contains it. A span of nothing
-  // would divide by zero and draw every bar the full width of the plot.
   const lo = Math.min(0, ...values);
   const hi = Math.max(0, ...values);
   const span = hi - lo || 1;
@@ -85,8 +74,6 @@ export function QuarterBars({
           const latest = figure(row.latest);
           const reported = prior !== null || latest !== null;
 
-          // The value text hangs off whichever bar the row actually has, so a
-          // company that stopped disclosing still reads left to right.
           const anchor = latest ?? prior ?? 0;
           const anchorX = scale(anchor);
           const toRight = anchor >= 0;
@@ -159,8 +146,6 @@ export function QuarterBars({
                   </text>
                 </>
               ) : (
-                // A zero-length bar and an absent figure look identical and mean
-                // opposite things, so an unreported row gets words instead.
                 <text
                   className="t-small"
                   x={LABEL_W}
@@ -179,10 +164,6 @@ export function QuarterBars({
   );
 }
 
-/**
- * A figure that cannot be drawn is treated as one that was never reported,
- * rather than allowed through to produce a bar of no defined length.
- */
 function figure(v: number | null): number | null {
   return v !== null && Number.isFinite(v) ? v : null;
 }
@@ -219,8 +200,6 @@ function Bar({
   title: string;
 }) {
   const end = scale(value);
-  // A reported zero stays a zero, but a figure too small to reach a pixel is
-  // held at one so it is not mistaken for one.
   const width = value === 0 ? 0 : Math.max(Math.abs(end - zeroX), 1);
 
   return (

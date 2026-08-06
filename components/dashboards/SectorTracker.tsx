@@ -8,18 +8,6 @@ import { PageHeader, Panel, Prov, Stack, StatBlock, StatRow } from "@/components
 import type { Provenance } from "@/lib/core/types";
 import { apiFetch } from "@/lib/client/api";
 
-/**
- * Quarterly IT services tracker.
- *
- * Every other dashboard in the console computes its figures from a filing on
- * each request. This one does not, and the difference is the point. It is a
- * dated reading of a curated quarterly record, and the material that justifies
- * the page is the commentary rather than the numbers: a revenue line for TCS
- * can be had anywhere, but the reason management gave for the way it moved is
- * published in no machine readable form. So the reason is carried verbatim,
- * keeps its own source line, and gets the widest column here.
- */
-
 interface Measure {
   prior: number | null;
   latest: number | null;
@@ -81,13 +69,7 @@ interface MeasureSpec {
   key: string;
   label: string;
   unit: string;
-  /** How the stored number reads: a money amount, a share of one, or a count. */
   scale: "amount" | "share" | "count";
-  /**
-   * Which direction is the better one, where there is one. Attrition rising is
-   * not an improvement, and headcount moving either way is a strategy rather
-   * than a result, so neither may be coloured as if it were good news.
-   */
   betterHigh: boolean | null;
 }
 
@@ -119,17 +101,12 @@ function readDate(iso: string): string {
   return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
 
-/**
- * The workbook writes an absent text field as "na" or leaves it empty. Both
- * mean the same thing and neither should reach the page as a literal.
- */
 function stated(value: string | null | undefined): string | null {
   const t = (value ?? "").trim();
   if (t.length === 0) return null;
   return t.toLowerCase() === "na" ? null : t;
 }
 
-/** Absent figure. Never a blank cell, never a zero standing in for a gap. */
 function NotReported() {
   return <span className="t-small">Not reported</span>;
 }
@@ -234,12 +211,6 @@ export function SectorTracker({
     return counts;
   }, [data]);
 
-  /**
-   * Every company in the tier goes to the chart, including the ones with no
-   * figure for this measure. The chart says so in words on that row, which is
-   * the information a reader needs; dropping the name would read as coverage
-   * the tracker does not claim to have.
-   */
   const bars = useMemo(
     () =>
       companies.map((c) => {
@@ -254,9 +225,6 @@ export function SectorTracker({
     [companies, spec.key, selected],
   );
 
-  // Two axes, so a name needs both figures to be placed at all. The measure is
-  // fixed here rather than following the chip above, because scale against
-  // profitability is the one pairing the reader is looking for.
   const positioning = useMemo(
     () =>
       companies.flatMap((c) => {
@@ -281,12 +249,6 @@ export function SectorTracker({
     [data, tier],
   );
 
-  /**
-   * The peer filters are applied by the route rather than here. It owns the
-   * definition of a region, including the correction for the workbook writing
-   * the same country two ways, and a second copy of that rule on the client
-   * would be one refresh away from disagreeing with the counts it publishes.
-   */
   useEffect(() => {
     setPeersExpanded(false);
     if (vertical === "All" && region === "All") {
@@ -504,7 +466,7 @@ export function SectorTracker({
 
             <Panel
               title="Positioning"
-              hint={`Revenue against EBIT margin for ${periods.latest}. A name is absent only where it reported neither figure for the quarter.`}
+              hint={`Revenue against EBIT margin for ${periods.latest}. Two axes, so a name is absent unless it reported both figures for the quarter.`}
               actions={<Prov p={data.provenance} />}
             >
               {positioning.length > 1 ? (

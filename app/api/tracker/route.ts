@@ -12,34 +12,13 @@ import { PEER_TAKEN_AT, PEER_UNIVERSE, type PeerCompany } from "@/lib/data/peer-
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-/**
- * The quarterly tracker, and the cohort arithmetic on top of it.
- *
- * Two things are served here that the filings dashboards cannot produce. The
- * first is what management said about a quarter and why a measure moved, which
- * no filing publishes in a machine readable form. The second is the cohort
- * position: a company's attrition means little until it is set against the
- * tier it competes with for the same people.
- *
- * The cohort figures are weighted by revenue rather than averaged. Twelve
- * companies in this set run from a few tens of millions of dollars a quarter
- * to several billion, and an unweighted mean hands each of them the same vote,
- * which produces a cohort margin no client of that cohort would recognise.
- */
-
 const TTL_MS = 6 * 60 * 60 * 1000;
 
 type Tier = TrackerCompany["tier"];
 
-/** Tiers and verticals in the order the datasets list them, not a second copy. */
 const TIERS: Tier[] = [...new Set(TRACKER.map((c) => c.tier))];
 const VERTICALS: string[] = [...new Set(PEER_UNIVERSE.map((p) => p.vertical))];
 
-/**
- * Measure keys and their units, read off the dataset in first seen order so a
- * measure added by the next ingest reaches the dashboard without this route
- * naming it.
- */
 const METRIC_KEYS: string[] = [];
 const METRIC_UNITS: Record<string, string> = {};
 for (const company of TRACKER) {
@@ -50,11 +29,6 @@ for (const company of TRACKER) {
   }
 }
 
-/**
- * Names for the provenance sentence only. The response carries the raw keys
- * and the dashboard titles its own columns; this is here so a reader is not
- * handed "ebitdaMarginPct" in the middle of a sentence.
- */
 const METRIC_LABELS: Record<string, string> = {
   revenueUsdM: "revenue",
   ebitMarginPct: "EBIT margin",
@@ -83,22 +57,13 @@ const EUROPE = new Set([
 
 const NAMED_REGIONS = ["India", "United States", "Europe"] as const;
 
-/** Buckets outside the three named regions, so every peer lands somewhere. */
 const OTHER_REGION = "Other";
 
-/**
- * The catch-all is a selectable region, not just a row in the breakdown. The
- * dashboard builds its region chips straight from `byRegion`, so a bucket that
- * is published there and refused here is a chip that can only ever fail.
- */
 const REGIONS = [...NAMED_REGIONS, OTHER_REGION] as const;
 type Region = (typeof REGIONS)[number];
 
 function regionOf(headquarters: string): string {
   if (headquarters === "India") return "India";
-  // The workbook writes the same country both ways. Left alone, the row filed
-  // under "USA" would fall into Other and the United States count would be one
-  // company short of the truth.
   if (headquarters === "United States" || headquarters === "USA") return "United States";
   if (EUROPE.has(headquarters)) return "Europe";
   return OTHER_REGION;
@@ -107,9 +72,7 @@ function regionOf(headquarters: string): string {
 export interface TrackerMovement {
   prior: number | null;
   latest: number | null;
-  /** Percentage change. Money and headcount only. */
   deltaPct: number | null;
-  /** Change in basis points. Margins, attrition and utilisation only. */
   deltaBps: number | null;
   status: string;
   reason: string;
@@ -126,10 +89,8 @@ export interface TrackerRow {
 export interface CohortMeasure {
   prior: number | null;
   latest: number | null;
-  /** How many of the cohort's companies stand behind those two figures. */
   reporting: number;
   basis: "total" | "revenue weighted" | "simple mean";
-  /** Members that do not report the measure, named rather than quietly dropped. */
   missing: string[];
 }
 
@@ -159,23 +120,11 @@ export interface PeerSection {
   rows: PeerCompany[];
 }
 
-/**
- * Trims the binary floating point tail. Subtracting 0.129 from 0.132 lands at
- * 30.000000000000004 basis points, and a figure carrying fourteen decimals of
- * noise reads as false precision on a slide.
- */
 function round(value: number, dp: number): number {
   const factor = 10 ** dp;
   return Math.round(value * factor) / factor;
 }
 
-/**
- * A rate and a level do not move in the same arithmetic. An EBIT margin going
- * from 24.5 to 24.9 per cent has risen 40 basis points, not 1.6 per cent, and
- * quoting the second overstates the move to anyone reading quickly. So shares
- * carry a basis point delta and nothing else, and levels carry a percentage
- * delta and nothing else.
- */
 function movement(
   prior: number | null,
   latest: number | null,
@@ -205,14 +154,6 @@ function buildRow(company: TrackerCompany): TrackerRow {
   return { name: company.name, tier: company.tier, measures };
 }
 
-/**
- * One cohort figure for one measure.
- *
- * A member reporting only one of the two quarters is left out of both columns.
- * A cohort whose membership changes between prior and latest shows movement
- * that is composition rather than performance, and the reader has no way to
- * see it happen.
- */
 function aggregate(members: TrackerCompany[], key: string): CohortMeasure {
   const unit = METRIC_UNITS[key] ?? "";
   const isShare = unit === "share";
@@ -251,8 +192,6 @@ function aggregate(members: TrackerCompany[], key: string): CohortMeasure {
   }
 
   if (!isShare) {
-    // Revenue and headcount are cohort totals. A mean of twelve revenues
-    // answers no question anyone asks of a sector page.
     const dp = 3;
     return {
       prior: round(contributors.reduce((s, c) => s + c.prior, 0), dp),
@@ -263,17 +202,12 @@ function aggregate(members: TrackerCompany[], key: string): CohortMeasure {
     };
   }
 
-  // Weights are each company's revenue in the same quarter as the rate, so the
-  // prior column is not weighted by the latest quarter's mix.
   const weighted = contributors.every(
     (c) =>
       c.weightPrior !== null && c.weightPrior > 0 && c.weightLatest !== null && c.weightLatest > 0,
   );
 
   if (!weighted) {
-    // Only when a contributing company reports the rate but no revenue to
-    // weight it by. Stated on the measure and again in the provenance, because
-    // a mean and a weighted mean are different numbers with the same label.
     return {
       prior: round(contributors.reduce((s, c) => s + c.prior, 0) / contributors.length, 6),
       latest: round(contributors.reduce((s, c) => s + c.latest, 0) / contributors.length, 6),
@@ -321,9 +255,6 @@ function buildPeers(vertical: string | null, region: Region | null): PeerSection
       3,
     );
 
-  // The breakdowns describe the set on screen, not the whole universe, so the
-  // counts always add up to `shown` and a filtered view stays internally
-  // consistent. `total` is what tells the reader how much was filtered away.
   const byVertical = VERTICALS.map((v) => {
     const subset = rows.filter((p) => p.vertical === v);
     return { vertical: v, count: subset.length, revenueUsdM: sum(subset) };
@@ -347,9 +278,6 @@ export async function GET(request: Request) {
   const verticalParam = (url.searchParams.get("vertical") ?? "all").trim();
   const regionParam = (url.searchParams.get("region") ?? "all").trim();
 
-  // Filters are matched against the values the datasets actually carry, and a
-  // value outside them is refused rather than silently emptying the page. The
-  // error names the accepted values and never echoes what was sent.
   let tier: Tier | null = null;
   if (tierParam.toLowerCase() !== "all") {
     const match = TIERS.find((t) => t.toLowerCase() === tierParam.toLowerCase());
@@ -386,16 +314,11 @@ export async function GET(request: Request) {
     region = match;
   }
 
-  // The datasets are checked in, so the cache is not sparing an upstream: it
-  // holds the aggregation for a filter combination that the dashboard requests
-  // on every chip click.
   const key = `tracker:${tier ?? "all"}:${vertical ?? "all"}:${region ?? "all"}`;
   const res = await cached(key, TTL_MS, async () => {
     const members = tier === null ? TRACKER : TRACKER.filter((c) => c.tier === tier);
     return {
       companies: members.map(buildRow),
-      // Cohorts follow the tier filter, so a tier-1 view is not compared
-      // against a cohort half of which is off screen.
       cohorts: (tier === null ? TIERS : [tier]).map(buildCohort),
       peers: buildPeers(vertical, region),
     };
@@ -419,8 +342,6 @@ export async function GET(request: Request) {
       .map(([k, m]) => `${label(k)} on ${m.reporting} of ${c.count} in ${c.tier}`),
   );
 
-  // The weighting argument is made with this cohort's own extremes rather than
-  // in the abstract, so the reader can check it against the table below it.
   const revenues = companies
     .map((c) => ({ name: c.name, value: c.measures.revenueUsdM?.latest ?? null }))
     .filter((c): c is { name: string; value: number } => c.value !== null)
@@ -444,8 +365,6 @@ export async function GET(request: Request) {
       ? ` Not every company reports every measure, and a cohort figure is only ever the companies behind it: ${partial.join("; ")}.`
       : "";
 
-  // Both dates are stated even when they match, since the two workbooks are
-  // ingested separately and can drift apart at the next refresh.
   const harvestNote = ` The tracker was read on ${TRACKER_TAKEN_AT.slice(0, 10)} and the peer universe on ${PEER_TAKEN_AT.slice(0, 10)}.`;
 
   return NextResponse.json(

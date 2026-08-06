@@ -10,8 +10,6 @@ export async function GET() {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (err) {
-    // Both providers failed and there was nothing cached. Say so rather than
-    // returning a plausible-looking rate.
     return NextResponse.json(
       {
         data: null,

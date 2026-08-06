@@ -14,14 +14,6 @@ import {
   useTooltip,
 } from "./kit";
 
-/**
- * Columns with a line overlaid on a second axis.
- *
- * The standard shape for revenue against margin: the absolute is a column
- * because it is a quantity, the ratio is a line because it is a rate. Plotting
- * both as columns would imply they are the same kind of thing.
- */
-
 export interface ComboPoint {
   label: string;
   bar: number;
@@ -98,7 +90,7 @@ export function ComboChart({
         <GridLines ticks={yTicks} scale={barScale} x0={m.left} x1={m.left + plotW} />
         <YAxis ticks={yTicks} scale={barScale} x={m.left} format={barFormat} />
 
-        {/* Right axis for the rate. */}
+        { }
         <g aria-hidden="true">
           {lineTicks.map((t) => (
             <text
@@ -163,7 +155,7 @@ export function ComboChart({
           y={m.top + plotH + 20}
         />
 
-        {/* Hit areas span the full band so the pointer never falls between bars. */}
+        { }
         {data.map((d, i) => (
           <rect
             key={`hit-${d.label}`}

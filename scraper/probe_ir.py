@@ -1,16 +1,3 @@
-"""
-Can a rendered browser reach the results files that a plain request cannot?
-
-Five companies in the coverage universe publish their results only through an
-investor relations site that builds its file list in the browser. A plain HTTP
-request returns the page shell with no link in it, so the console has no source
-for them at all. This checks whether rendering the page changes that, before
-any of it is wired into the harvest.
-
-Run:
-    scraper/.venv/bin/python scraper/probe_ir.py
-"""
-
 import re
 import sys
 from urllib.parse import urljoin
@@ -30,7 +17,6 @@ RESULTS_RE = re.compile(
     r"result|quarter|financial|earning|fact|press|q[1-4]|fy\d{2}", re.I
 )
 
-
 def links_from(page, base):
     out = set()
     for href in page.css("a::attr(href)").getall():
@@ -41,13 +27,11 @@ def links_from(page, base):
             out.add(absolute)
     return out
 
-
 def main() -> int:
     for name, url in TARGETS:
         print(f"\n=== {name}")
         print(f"    {url}")
 
-        # Baseline: the same plain request the console makes today.
         try:
             plain = Fetcher.get(url, stealthy_headers=True, timeout=30)
             plain_files = links_from(plain, url)
@@ -56,7 +40,6 @@ def main() -> int:
             print(f"    plain    failed: {type(exc).__name__}: {exc}")
             plain_files = set()
 
-        # Rendered: let the page build its own list first.
         try:
             page = DynamicFetcher.fetch(
                 url,
@@ -80,7 +63,6 @@ def main() -> int:
             print(f"    rendered failed: {type(exc).__name__}: {str(exc)[:160]}")
 
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

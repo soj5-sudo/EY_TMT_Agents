@@ -7,7 +7,6 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const requested = url.searchParams.get("topics");
 
-  // Only known topic ids are honoured; anything else selects nothing.
   const topicIds = requested
     ? requested
         .split(",")

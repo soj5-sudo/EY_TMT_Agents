@@ -1,15 +1,3 @@
-/**
- * Outbound HTTP. Single choke point for the allowlist, timeouts and headers.
- *
- * SSRF containment is structural: no route can reach a host that is not listed
- * below, and private ranges are refused outright. Several upstreams reject the
- * default Node user agent, so a browser header set is sent by default.
- */
-
-/**
- * Hosts this application is permitted to contact. Exact match or a
- * dot-suffix match against the registrable domain.
- */
 const ALLOWED_HOSTS = [
   "query1.finance.yahoo.com",
   "query2.finance.yahoo.com",
@@ -29,8 +17,6 @@ const ALLOWED_HOSTS = [
   "hcltech.com",
   "www.wipro.com",
   "wipro.com",
-  // Investor relations hosts for the companies outside the SEC register. Each
-  // was verified to serve its published results files to an ordinary request.
   "www.mphasis.com",
   "mphasis.com",
   "www.techmahindra.com",
@@ -51,8 +37,6 @@ const ALLOWED_HOSTS = [
   "investors.capgemini.com",
   "www.capgemini.com",
   "capgemini.com",
-  // Hosts carrying the results files discovered for the wider peer set. Each
-  // was verified to serve a document that parses into real figures.
   "investors.coforge.com",
   "www.experianplc.com",
   "experianplc.com",
@@ -105,12 +89,6 @@ function hostAllowed(host: string): boolean {
   return ALLOWED_HOSTS.some((a) => h === a || h.endsWith(`.${a}`));
 }
 
-/**
- * Rejects literal private, loopback, link-local and unspecified addresses.
- * DNS rebinding is out of scope for a local console, but a hostname that
- * resolves to a private range still cannot be reached because it would have
- * to be on the allowlist first.
- */
 function isPrivateLiteral(host: string): boolean {
   const h = host.toLowerCase().replace(/^\[|\]$/g, "");
   if (h === "localhost" || h === "0.0.0.0" || h === "::" || h === "::1") return true;
@@ -119,7 +97,6 @@ function isPrivateLiteral(host: string): boolean {
   if (/^192\.168\./.test(h)) return true;
   if (/^169\.254\./.test(h)) return true;
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
-  // IPv6 unique-local and link-local.
   if (/^f[cd][0-9a-f]{2}:/.test(h)) return true;
   if (/^fe80:/.test(h)) return true;
   return false;
@@ -127,12 +104,10 @@ function isPrivateLiteral(host: string): boolean {
 
 export interface FetchOptions {
   timeoutMs?: number;
-  /** Number of retries after the first attempt. */
   retries?: number;
   headers?: Record<string, string>;
   method?: "GET" | "POST";
   body?: string;
-  /** Cap on the response body, in bytes. Guards against a hostile payload. */
   maxBytes?: number;
 }
 
@@ -157,8 +132,6 @@ export async function safeFetch(
     );
   }
 
-  // No private address is ever a legitimate target: every source this console
-  // reads is a public endpoint.
   if (isPrivateLiteral(parsed.hostname)) {
     throw new UpstreamError(
       `Blocked private address ${parsed.hostname}`,
@@ -181,7 +154,6 @@ export async function safeFetch(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (attempt > 0) {
-      // Linear backoff. These are polite public endpoints, not a load test.
       await sleep(400 * attempt);
     }
 
@@ -204,7 +176,6 @@ export async function safeFetch(
       });
 
       if (!res.ok) {
-        // 4xx other than 429 will not become ok on retry.
         if (res.status < 500 && res.status !== 429) {
           throw new UpstreamError(
             `${parsed.hostname} returned ${res.status}`,
@@ -292,10 +263,6 @@ export async function fetchBuffer(
   return buf;
 }
 
-/**
- * Streams the body and aborts once the cap is passed, so a server that lies
- * about content-length cannot exhaust memory.
- */
 async function readCapped(res: Response, maxBytes: number): Promise<string> {
   if (!res.body) return res.text();
 

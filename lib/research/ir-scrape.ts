@@ -1,24 +1,3 @@
-/**
- * Investor relations document scraper.
- *
- * Companies outside the SEC register publish the same substance the register
- * would carry, on their own site, as a spreadsheet or a results release. TCS
- * publishes a quarterly data sheet as a workbook with nine sheets of key
- * financial and operating metrics; Bharti publishes a quarterly workbook;
- * HCLTech and Tech Mahindra publish results releases as documents. None of it
- * needs a data room and none of it needs a key.
- *
- * This crawls the investor relations index, finds the published files, ranks
- * them by how recent and how relevant the filename is, downloads the best
- * candidates and reads them. A workbook is read structurally: the period header
- * row is located first, then every labelled row beneath it is mapped onto those
- * periods, so a figure always arrives attached to the quarter it belongs to.
- *
- * Only what the document states is recorded. Nothing is interpolated across
- * periods and nothing is converted between currencies, because a metric whose
- * basis has been quietly changed is worse than a metric that is absent.
- */
-
 import { cached } from "@/lib/core/cache";
 import { fetchBuffer, fetchText } from "@/lib/core/fetcher";
 import { xlsxText, XlsxError } from "@/lib/research/xlsx";
@@ -30,7 +9,6 @@ const INDEX_TTL_MS = 6 * 60 * 60 * 1000;
 const DOC_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_DOC_BYTES = 30 * 1024 * 1024;
 
-/** These hosts refuse a bare client, so the crawler presents a normal one. */
 const BROWSER_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -38,23 +16,13 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
-/* ------------------------------------------------------------------ *
- * Where the documents live
- * ------------------------------------------------------------------ */
-
 export interface IrIndex {
   symbol: string;
   name: string;
-  /** Index pages to crawl, in order. The first that yields files wins. */
   urls: string[];
-  /** Base for resolving relative links, when it differs from the index host. */
   base?: string;
 }
 
-/**
- * Verified index pages. Each was confirmed to serve the company's published
- * results files to an ordinary browser request.
- */
 export const IR_INDEXES: IrIndex[] = [
   {
     symbol: "TCS.NS",
@@ -80,9 +48,6 @@ export const IR_INDEXES: IrIndex[] = [
   {
     symbol: "TECHM.NS",
     name: "Tech Mahindra",
-    // The quarterly earnings page carries a full KPI workbook: six sheets and
-    // a quarter by quarter grid running from FY2016. The investors landing
-    // page links only shareholder notices.
     urls: [
       "https://www.techmahindra.com/investors/quarterly-earnings/",
       "https://www.techmahindra.com/en-in/investors/",
@@ -101,8 +66,6 @@ export const IR_INDEXES: IrIndex[] = [
   {
     symbol: "LTIM.NS",
     name: "LTIMindtree",
-    // The file list is built in the browser, so a plain request sees nothing.
-    // The harvest renders it; the deployment falls back to what was harvested.
     urls: [
       "https://www.ltimindtree.com/investors/financial-results/",
       "https://www.ltimindtree.com/investors/",
@@ -111,8 +74,6 @@ export const IR_INDEXES: IrIndex[] = [
   {
     symbol: "COFORGE.NS",
     name: "Coforge Limited",
-    // The investor site is hosted separately from the corporate one, which is
-    // why the corporate path returned only a modern slavery statement.
     urls: ["https://investors.coforge.com/quarter-reports", "https://investors.coforge.com/"],
   },
   {
@@ -190,23 +151,16 @@ export function irIndexFor(symbol: string): IrIndex | null {
   return IR_INDEXES.find((i) => i.symbol === symbol) ?? null;
 }
 
-/* ------------------------------------------------------------------ *
- * Discovery
- * ------------------------------------------------------------------ */
-
 export interface IrDocRef {
   url: string;
   filename: string;
   kind: "workbook" | "document";
-  /** Fiscal period read out of the filename, when it names one. */
   period: string | null;
-  /** Higher is a better candidate to read. */
   score: number;
 }
 
 const FILE_LINK = /href\s*=\s*["']([^"'\s>]+\.(?:xlsx|xls|pdf))(?:\?[^"']*)?["']/gi;
 
-/** Fiscal period as it appears in a published filename. */
 const PERIOD_PATTERNS: RegExp[] = [
   /\b(Q[1-4])[ _-]?(FY)?[ _-]?(\d{2,4})\b/i,
   /\b([1-4])Q[ _-]?(FY)?[ _-]?(\d{2,4})\b/i,
@@ -224,14 +178,6 @@ function readPeriod(name: string): string | null {
   return null;
 }
 
-/**
- * Ranks a candidate by what its filename says it is.
- *
- * A workbook of key metrics is worth far more than a governance policy, and
- * both live on the same index page. Scoring on the filename is what keeps the
- * crawler from downloading thirty megabytes of annual report to find a number
- * that is on the first sheet of the data sheet.
- */
 function score(filename: string, kind: IrDocRef["kind"], period: string | null): number {
   const n = filename.toLowerCase();
   let s = 0;
@@ -244,14 +190,9 @@ function score(filename: string, kind: IrDocRef["kind"], period: string | null):
   if (/annual[ _-]?report/.test(n)) s += 10;
   if (period) s += 30;
 
-  // Recency, read from the fiscal year in the name.
-  // Newest first. The year is matched with optional separators because
-  // publishers write "q1fy25" and "q1-fy-27" for the same thing, and matching
-  // only the tight form silently prefers a two year old file.
   const y = n.match(/f\s*y[ _-]?(\d{2})\b/) ?? n.match(/\b20(\d{2})\b/);
   if (y) s += Math.min(34, Number(y[1]));
 
-  // Things that are published on the same page but are not results.
   if (/policy|code[ _-]?of|charter|notice|intimation|disclosure|transcript|ppt|presentation|esg|sustainab|agm|postal|scrutin|newspaper|advertis/.test(n))
     s -= 70;
 
@@ -272,31 +213,16 @@ interface DiscoveredIndex {
   files: string[];
 }
 
-/**
- * Files a rendered pass already found for this company.
- *
- * Several of these sites build their file list in the browser, so crawling the
- * index with a plain request finds nothing and the company appears to publish
- * no results at all. The rendered pass runs in the harvest, where a browser is
- * available, and writes down what it saw. Using its list here means the
- * deployment reads the same documents without needing to render anything.
- */
 function discoveredFor(symbol: string): DiscoveredIndex | null {
   const hit = IR_DISCOVERED[symbol];
   return hit && hit.files.length > 0 ? hit : null;
 }
 
-/** Crawls the index pages and returns the candidate files, best first. */
 export async function discoverIrDocuments(index: IrIndex): Promise<{
   indexUrl: string;
   docs: IrDocRef[];
 }> {
   const res = await cached(`ir:index:${index.symbol}`, INDEX_TTL_MS, async () => {
-    // The rendered pass and the plain crawl are combined rather than one
-    // replacing the other. They find different things: rendering reaches a
-    // list that only exists in the browser, while the plain crawl of the
-    // company's own index sometimes carries files the rendered page does not
-    // link. Preferring either one alone loses a company that the other covers.
     const seen = new Set<string>();
     const docs: IrDocRef[] = [];
 
@@ -346,49 +272,21 @@ export async function discoverIrDocuments(index: IrIndex): Promise<{
   return res.value;
 }
 
-/* ------------------------------------------------------------------ *
- * Workbook reading
- * ------------------------------------------------------------------ */
-
 export interface IrUnit {
-  /** ISO code the figures are stated in, when the sheet says. */
   currency: string | null;
-  /** Multiplier from the stated scale to units. Millions give 1e6. */
   scale: number;
-  /** Whether the scale was read from the sheet or is the default of one. */
   scaleStated: boolean;
-  /** The line the hint was read from, kept so the reading can be audited. */
   source: string;
 }
 
 export interface IrMetric {
   label: string;
-  /** Values by the period column they sit under. */
   values: Array<{ period: string; value: number }>;
-  /** Currency and scale in force where the row was read, when stated. */
   unit: IrUnit | null;
-  /**
-   * Whether the row's own label declares its units, as in
-   * "Reported Revenue ($M)". A spreadsheet states units once in a caption that
-   * governs the table beneath it; a results release laid out as prose has no
-   * such structure, so a caption found earlier in the text may belong to a
-   * different table entirely. A self describing label is trustworthy in both.
-   */
   unitFromLabel: boolean;
-  /** Set when the row came from a spreadsheet rather than from prose. */
   structured?: boolean;
 }
 
-/**
- * Currency and scale as a published sheet declares them.
- *
- * A results workbook states its units once, in a caption above the table:
- * "Consolidated Income Statement as per IFRS - USD Mn", or "Amount in Rs Mn,
- * except ratios". Every figure below that caption is in those units. Reading
- * the caption is the difference between 7,421 meaning seven billion dollars
- * and meaning seven thousand rupees, and there is no way to infer it from the
- * number itself.
- */
 const CURRENCY_HINT: Array<[RegExp, string]> = [
   [/\bUSD?\b|\bUS ?\$|\$\s?(?:m|bn|k)\b|\bdollar/i, "USD"],
   [/\bINR\b|\bRs\.?\b|\brupee|₹/i, "INR"],
@@ -427,7 +325,6 @@ function readUnitHint(line: string): IrUnit | null {
   return { currency, scale, scaleStated: scaled, source: line.slice(0, 160) };
 }
 
-/** A cell that names a reporting period rather than carrying a value. */
 const PERIOD_CELL =
   /^(?:[1-4]Q[ ]?(?:FY)?[0-9]{2,4}|Q[1-4][ _-]?(?:FY)?[ ]?[0-9]{2,4}|FY[ ]?[0-9]{2,4}|H[12][ ]?(?:FY)?[0-9]{2,4}|(?:19|20)[0-9]{2}[-/][0-9]{2}|[A-Z][a-z]{2}[-' ][0-9]{2,4})$/;
 
@@ -435,14 +332,6 @@ function isPeriodCell(s: string): boolean {
   return PERIOD_CELL.test(s.trim());
 }
 
-/**
- * A header written as plain calendar years.
- *
- * Bare four digit numbers cannot be accepted as periods on sight: a row of
- * figures in the nineteen hundreds reads exactly the same, and treating it as
- * a header attributes every row beneath it to invented periods. A run of them
- * is only a header when the values step by one year, which figures do not.
- */
 function readYearHeader(cells: string[]): string[] | null {
   const years: Array<{ i: number; v: number }> = [];
   for (let i = 0; i < cells.length; i++) {
@@ -456,25 +345,10 @@ function readYearHeader(cells: string[]): string[] | null {
   return cells;
 }
 
-/* --- Date-serial headers ------------------------------------------- *
- *
- * A spreadsheet that formats its period header as a date stores it as a serial
- * day count, so the header arrives as a row of five-digit integers. Bharti's
- * quarterly workbook does exactly this and its header reads 46112, 46022,
- * 45930, and so on.
- *
- * Detecting these by range alone would misread a row of figures that happens
- * to fall in the same range. What distinguishes a date header is the spacing:
- * consecutive period ends are a month, a quarter or a year apart, and revenue
- * figures are not. So the run has to be both in range and evenly spaced before
- * it is accepted.
- */
-
 const SERIAL_MIN = 36_526; // 2000-01-01
 const SERIAL_MAX = 51_136; // 2040-01-01
 
 function serialToDate(serial: number): Date {
-  // The serial epoch is 1899-12-30, which absorbs the 1900 leap-year quirk.
   return new Date(Date.UTC(1899, 11, 30) + serial * 86_400_000);
 }
 
@@ -485,7 +359,6 @@ function serialLabel(serial: number): string {
   return `${MONTHS[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(2)}`;
 }
 
-/** Returns the row rewritten with date serials as period labels, or null. */
 function readSerialHeader(cells: string[]): string[] | null {
   const serials: Array<{ i: number; v: number }> = [];
   for (let i = 0; i < cells.length; i++) {
@@ -506,7 +379,6 @@ function readSerialHeader(cells: string[]): string[] | null {
   return out;
 }
 
-/** Parses a number as published, tolerating separators, percents and brackets. */
 function toNumber(raw: string): number | null {
   const s = raw.trim();
   if (!s || s === "-" || s === "NA" || s === "N/A") return null;
@@ -518,15 +390,6 @@ function toNumber(raw: string): number | null {
   return neg ? -n : n;
 }
 
-/**
- * Reads labelled metric rows out of a flattened workbook.
- *
- * The reader upstream joins each row's cells with a pipe. A published data
- * sheet lays out one header row of period labels followed by labelled rows of
- * figures, so the parser tracks the most recent header and maps each row's
- * values onto it by column. A row read without a header in scope is dropped,
- * because a figure with no period attached cannot be used for anything.
- */
 export function parseWorkbookMetrics(text: string): {
   metrics: IrMetric[];
   periods: string[];
@@ -544,8 +407,6 @@ export function parseWorkbookMetrics(text: string): {
     const rawCells = line.split("|").map((c) => c.trim());
     if (rawCells.length < 2) continue;
 
-    // A header written as formatted dates arrives as serials, so it is
-    // converted before the row is classified.
     const yearHeader = readYearHeader(rawCells);
     if (yearHeader) {
       header = yearHeader;
@@ -562,7 +423,6 @@ export function parseWorkbookMetrics(text: string): {
 
     const cells = rawCells;
 
-    // A header row is one whose cells are mostly period labels.
     const periodCells = cells.filter(isPeriodCell).length;
     if (periodCells >= 2 && periodCells >= cells.length - 2) {
       header = cells;
@@ -576,12 +436,6 @@ export function parseWorkbookMetrics(text: string): {
     if (!label || label.length < 2 || label.length > 90) continue;
     if (toNumber(label) !== null) continue;
 
-    // A header row that begins with a period rather than a label is one column
-    // narrower than the data rows beneath it, because the data rows carry a
-    // label in the first column and the header does not. Without this the whole
-    // sheet is read one quarter out of step, which is worse than not reading it
-    // at all: every figure is attributed to the wrong period and still looks
-    // entirely plausible.
     const offset = isPeriodCell(header[0]) || /^(?:19|20)[0-9]{2}$/.test(header[0]) ? 1 : 0;
 
     const values: IrMetric["values"] = [];
@@ -607,7 +461,6 @@ export function parseWorkbookMetrics(text: string): {
   return { metrics, periods: [...allPeriods] };
 }
 
-/** Two rows can be combined only when they are stated the same way. */
 function sameUnit(a: IrUnit | null, b: IrUnit | null): boolean {
   if (a === null || b === null) return a === b;
   return a.currency === b.currency && a.scale === b.scale;
@@ -615,7 +468,6 @@ function sameUnit(a: IrUnit | null, b: IrUnit | null): boolean {
 
 export interface IrReadResult {
   doc: IrDocRef;
-  /** True when the figures came from a spreadsheet rather than from prose. */
   structured: boolean;
   ok: boolean;
   reason: string | null;
@@ -625,7 +477,6 @@ export interface IrReadResult {
   periods: string[];
 }
 
-/** Downloads one published file and reads what it states. */
 export async function readIrDocument(doc: IrDocRef): Promise<IrReadResult> {
   const empty = {
     doc,
@@ -653,8 +504,6 @@ export async function readIrDocument(doc: IrDocRef): Promise<IrReadResult> {
       }
 
       const extracted = extractPdfText(bytes);
-      // A results release is laid out as text rather than as a grid, so the
-      // same column mapping is applied to whitespace-separated lines.
       const asGrid = extracted.lines
         .map((l) => l.replace(/\s{2,}/g, " | "))
         .join("\n");
@@ -684,40 +533,24 @@ export async function readIrDocument(doc: IrDocRef): Promise<IrReadResult> {
   }
 }
 
-/* ------------------------------------------------------------------ *
- * Orchestration
- * ------------------------------------------------------------------ */
-
 export interface IrScrapeResult {
   symbol: string;
   name: string;
   indexUrl: string;
-  /** Every candidate found on the index, whether or not it was read. */
   discovered: number;
   workbooks: number;
-  /** Files actually downloaded and parsed. */
   read: IrReadResult[];
   metrics: IrMetric[];
   periods: string[];
   provenance: Provenance;
 }
 
-/**
- * Crawls, downloads and reads a company's published results files.
- *
- * At most `limit` files are downloaded, best-ranked first, and they are taken
- * one at a time. These are a publisher's own servers, and a burst of parallel
- * downloads is both impolite and the fastest way to be blocked.
- */
 export async function scrapeIr(symbol: string, limit = 3): Promise<IrScrapeResult | null> {
   const index = irIndexFor(symbol);
   if (!index) return null;
 
   const { indexUrl, docs } = await discoverIrDocuments(index);
 
-  // A negative score means the filename says it is a policy, a notice or a
-  // meeting paper. Reading three of those and reporting nothing is worse than
-  // reporting that the index carried no results files.
   const candidates = docs.filter((d) => d.score > 0).slice(0, limit);
 
   const read: IrReadResult[] = [];
@@ -725,7 +558,6 @@ export async function scrapeIr(symbol: string, limit = 3): Promise<IrScrapeResul
     read.push(await readIrDocument(doc));
   }
 
-  // Merge across files, keeping the first statement of any label and period.
   const byLabel = new Map<string, IrMetric>();
   const periods = new Set<string>();
 
@@ -742,11 +574,6 @@ export async function scrapeIr(symbol: string, limit = 3): Promise<IrScrapeResul
           structured: m.structured,
         });
       } else if (sameUnit(held.unit, m.unit)) {
-        // Only extend a series from a file stated in the same units. A
-        // publisher's archive often restates an old year in a different
-        // currency and scale under an identical row label, and appending it
-        // blind produces a series that appears to collapse by an order of
-        // magnitude between two adjacent periods.
         for (const v of m.values) {
           if (!held.values.some((x) => x.period === v.period)) held.values.push(v);
         }
@@ -779,11 +606,6 @@ export async function scrapeIr(symbol: string, limit = 3): Promise<IrScrapeResul
   };
 }
 
-/* ------------------------------------------------------------------ *
- * Metric lookup
- * ------------------------------------------------------------------ */
-
-/** Finds a metric by any of a set of label patterns, most recent value first. */
 export function findMetric(
   metrics: IrMetric[],
   patterns: RegExp[],

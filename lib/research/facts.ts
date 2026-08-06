@@ -1,23 +1,3 @@
-/**
- * Deep fact ledger.
- *
- * A single company-facts document carries every concept a filer has ever
- * tagged, which for a large registrant is four to six hundred of them. The
- * console previously read eight. Eight concepts support a profit and loss
- * summary and nothing else, which is why most diligence agents had no material
- * to work from and could only restate their own remit.
- *
- * This reads the same one document and lifts the concepts a diligence review
- * actually asks for: the working capital components, the order book, the tax
- * position, the lease and debt commitments, the share count and the buyback,
- * the litigation accrual. Each is resolved across candidate tags in both
- * taxonomies, because filers migrate tags between years and foreign private
- * issuers report the same substance under IFRS names.
- *
- * Nothing here infers a figure. A concept the filer never tagged is absent,
- * and absent means the agent that wanted it raises a request instead.
- */
-
 import { fetchJson } from "@/lib/core/fetcher";
 import { cached } from "@/lib/core/cache";
 import { nowIso, type Provenance } from "@/lib/core/types";
@@ -35,24 +15,18 @@ export interface FactValue {
   value: number;
   form: string;
   filed: string;
-  /** Fiscal label derived from the period end, never from the filing's own
-   *  fiscal year field, which describes the filing rather than the period. */
   label: string;
 }
 
 export interface FactSeries {
   key: string;
   label: string;
-  /** The XBRL tag or tags the value was actually read from. */
   tag: string;
   unit: string;
   annual: FactValue[];
   quarterly: FactValue[];
-  /** Most recent annual value. */
   latest: number | null;
-  /** Prior annual value, for a year on year read. */
   prior: number | null;
-  /** Most recent instantaneous value, for balance sheet concepts. */
   instant: number | null;
 }
 
@@ -61,9 +35,7 @@ export type FactKey = keyof typeof DD_CONCEPTS;
 export interface FactLedger {
   cik: string;
   entityName: string;
-  /** Concepts the filer has tagged at least once, across all taxonomies. */
   conceptsTagged: number;
-  /** Of the concepts this review asks for, how many the filer reports. */
   conceptsResolved: number;
   conceptsRequested: number;
   taxonomies: string[];
@@ -72,13 +44,7 @@ export interface FactLedger {
   provenance: Provenance;
 }
 
-/**
- * The concepts a diligence review asks for, with the tags each is reported
- * under. Order is preference order: the first tag that carries values wins,
- * and later tags top up periods the earlier ones do not cover.
- */
 const DD_CONCEPTS = {
-  /* --- Profit and loss ------------------------------------------------ */
   revenue: {
     label: "Revenue",
     unit: "USD",
@@ -137,7 +103,6 @@ const DD_CONCEPTS = {
       "ImpairmentLossRecognisedInProfitOrLossGoodwill",],
   },
 
-  /* --- Balance sheet -------------------------------------------------- */
   assets: { label: "Total assets", unit: "USD", tags: ["Assets"] },
   currentAssets: { label: "Current assets", unit: "USD", tags: ["AssetsCurrent", "CurrentAssets"] },
   currentLiabilities: { label: "Current liabilities", unit: "USD", tags: ["LiabilitiesCurrent", "CurrentLiabilities"] },
@@ -252,7 +217,6 @@ const DD_CONCEPTS = {
     tags: ["MinorityInterest", "NoncontrollingInterests"],
   },
 
-  /* --- Cash flow ------------------------------------------------------ */
   cashFromOps: {
     label: "Cash from operations",
     unit: "USD",
@@ -305,7 +269,6 @@ const DD_CONCEPTS = {
     tags: ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends", "DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid"],
   },
 
-  /* --- People and compensation ---------------------------------------- */
   employees: {
     label: "Employees",
     unit: "pure",
@@ -320,7 +283,6 @@ const DD_CONCEPTS = {
       "ExpenseFromSharebasedPaymentTransactionsWithEmployees",],
   },
 
-  /* --- Tax -------------------------------------------------------------*/
   taxExpense: {
     label: "Income tax expense",
     unit: "USD",
@@ -354,7 +316,6 @@ const DD_CONCEPTS = {
     ],
   },
 
-  /* --- Contracts, litigation and commitments --------------------------- */
   orderBook: {
     label: "Remaining performance obligation",
     unit: "USD",
@@ -380,7 +341,6 @@ const DD_CONCEPTS = {
       "ContractualCommitmentsForAcquisitionOfPropertyPlantAndEquipment",],
   },
 
-  /* --- Per share -------------------------------------------------------*/
   epsDiluted: {
     label: "Diluted earnings per share",
     unit: "USD/shares",
@@ -397,10 +357,6 @@ const DD_CONCEPTS = {
 } as const;
 
 export const FACT_KEYS = Object.keys(DD_CONCEPTS) as FactKey[];
-
-/* ------------------------------------------------------------------ *
- * Period classification
- * ------------------------------------------------------------------ */
 
 const ANNUAL_FORM = /^(10-K|20-F|40-F)/;
 const PERIODIC_FORM = /^(10-K|10-Q|20-F|40-F|6-K)/;
@@ -423,7 +379,6 @@ interface RawFact {
   fp?: string;
 }
 
-/** All units a concept was reported in, flattened with the unit recorded. */
 function unitsOf(entry: { units?: Record<string, RawFact[]> }): Array<[string, RawFact[]]> {
   return Object.entries(entry.units ?? {});
 }
@@ -433,9 +388,6 @@ function buildSeries(
   def: (typeof DD_CONCEPTS)[FactKey],
   facts: Record<string, Record<string, { units?: Record<string, RawFact[]> }>>,
 ): FactSeries | null {
-  // Period identity is start-and-end, so an annual and a quarterly fact that
-  // share an end date do not collide. The latest filed value wins, which is
-  // also how a restatement supersedes the figure it corrects.
   const merged = new Map<string, FactValue>();
   const tagsUsed: string[] = [];
   let unit: string = def.unit;
@@ -446,7 +398,6 @@ function buildSeries(
       if (!entry) continue;
 
       const units = unitsOf(entry);
-      // Prefer the declared unit; otherwise take whichever the filer used.
       const chosen =
         units.find(([u]) => u === def.unit) ??
         units.find(([u]) => u.startsWith("USD")) ??
@@ -483,14 +434,7 @@ function buildSeries(
 
   const all = [...merged.values()].sort((a, b) => a.end.localeCompare(b.end));
 
-  // A duration fact spanning about a year on an annual form is the annual
-  // series. An instant fact (no start) belongs to the balance sheet and is
-  // treated as annual when it lands on an annual form.
   const annual = all.filter((p) => {
-    // A balance sheet concept is an instant. Requiring it to arrive on an
-    // annual form drops the years where the filer tagged the same balance only
-    // in a quarterly report, and the series then ends silently two years
-    // early while every ratio built on it keeps returning a plausible number.
     if (p.start === null) return true;
     const d = days(p.start, p.end);
     return d > 300 && d < 400 && ANNUAL_FORM.test(p.form);
@@ -502,7 +446,6 @@ function buildSeries(
     return d > 60 && d < 120;
   });
 
-  // Keep the latest value per fiscal label so restatements collapse.
   const dedupe = (xs: FactValue[]) => {
     const m = new Map<string, FactValue>();
     for (const x of xs) {
@@ -529,11 +472,6 @@ function buildSeries(
   };
 }
 
-/**
- * Reads the whole company-facts document once and lifts every diligence
- * concept from it. One network call, because the endpoint returns the filer's
- * entire tagged history in a single response.
- */
 export async function getFactLedger(cik: string): Promise<FactLedger> {
   const padded = cik.padStart(10, "0");
 
@@ -561,7 +499,6 @@ export async function getFactLedger(cik: string): Promise<FactLedger> {
       if (built) series[key] = built;
     }
 
-    // The fiscal year end is the month and day of the latest annual period.
     const rev = series.revenue ?? series.assets ?? series.netIncome;
     const fiscalYearEnd = rev?.annual.at(-1)?.end.slice(5) ?? null;
 
@@ -596,10 +533,6 @@ export async function getFactLedger(cik: string): Promise<FactLedger> {
   };
 }
 
-/* ------------------------------------------------------------------ *
- * Read helpers used by the agents
- * ------------------------------------------------------------------ */
-
 export function val(l: FactLedger, k: FactKey): number | null {
   return l.series[k]?.latest ?? null;
 }
@@ -616,7 +549,6 @@ export function has(l: FactLedger, ...keys: FactKey[]): boolean {
   return keys.every((k) => l.series[k] !== undefined);
 }
 
-/** Ratio guarded against a denominator too small to carry meaning. */
 export function ratio(
   numerator: number | null,
   denominator: number | null,
@@ -632,7 +564,6 @@ export function annualOf(l: FactLedger, k: FactKey): FactValue[] {
   return l.series[k]?.annual ?? [];
 }
 
-/** Most recent filing date across every concept read. */
 export function ledgerLastFiled(l: FactLedger): string | null {
   let latest: string | null = null;
   for (const s of Object.values(l.series)) {

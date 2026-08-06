@@ -112,10 +112,6 @@ export function SectorSignal() {
     load();
   }, [load]);
 
-  // Everything the sector and region filters admit, whether or not it reports
-  // figures. The count rings are drawn from this, because a company with no
-  // public numbers still occupies a position in the sector and leaving it out
-  // would make the coverage map answer a different question from the one asked.
   const selected = useMemo(
     () =>
       (data?.rows ?? [])
@@ -124,8 +120,6 @@ export function SectorSignal() {
     [data, sector, region],
   );
 
-  // The subset carrying reported figures. Revenue rings and the table read from
-  // this, since a share of nothing is not a share.
   const rows = useMemo(
     () =>
       selected
@@ -148,10 +142,6 @@ export function SectorSignal() {
     return [...map.entries()].map(([label, value]) => ({ label, value }));
   }, [rows]);
 
-  // Every tracked company counted once against each theme it carries, which is
-  // what makes this the coverage map rather than a revenue split: a name with
-  // no reported figures still occupies a position in the sector and is exactly
-  // the thing a reader is looking for when they ask what is covered.
   const themeCountSlices = useMemo(() => {
     const map = new Map<string, number>();
     for (const r of selected) {

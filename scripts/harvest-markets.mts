@@ -1,16 +1,3 @@
-/**
- * Market snapshot generator.
- *
- * Fetches every universe symbol and index from the public quote endpoint,
- * serialised well inside its rate limit, and writes the result into the repo
- * as the last-resort fallback tier. The application labels anything served
- * from this file as baseline, dated, so a snapshot price is never mistaken
- * for a live one.
- *
- * Run when the endpoint answers, ideally just before a deploy:
- *   node --experimental-strip-types scripts/harvest-markets.mts
- */
-
 import { writeFileSync } from "node:fs";
 import { UNIVERSE, INDICES } from "../lib/data/universe.ts";
 

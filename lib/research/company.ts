@@ -1,15 +1,3 @@
-/**
- * On-demand company research.
- *
- * Takes a name, resolves it against the SEC register and the coverage
- * universe, then assembles a dossier from primary sources: filing history and
- * XBRL financials from EDGAR, live market data, and verified press coverage.
- *
- * Findings are computed from the retrieved figures. Nothing here asks a model
- * what it thinks a trend means, because a diligence conclusion that cannot be
- * traced to a source number is not usable.
- */
-
 import type { AgentFinding, Provenance } from "@/lib/core/types";
 import { nowIso } from "@/lib/core/types";
 import {
@@ -38,7 +26,6 @@ export interface FinancialSeries {
   metric: string;
   tag: string;
   unit: "USD";
-  /** Whether each point is a year or a quarter. Growth maths depends on it. */
   periodType: "annual" | "quarterly";
   points: Array<{ period: string; label: string; value: number; form: string; filed: string }>;
 }
@@ -65,20 +52,11 @@ export interface CompanyDossier {
     years: number;
   };
   news: NewsItem[];
-  /** Quarterly series parsed from the company's own IR documents. Used for
-   *  companies that do not file with the SEC. */
   irQuarters: IrQuarter[];
   irUrl: string | null;
-  /**
-   * The tagged concepts a diligence review asks for, well beyond the profit
-   * and loss summary. This is what most agents in a run actually read.
-   */
   facts: FactLedger | null;
-  /** Narrative sections of the latest annual report. */
   filing: FilingText | null;
-  /** Files downloaded and read from the company's own investor relations site. */
   ir: IrScrapeResult | null;
-  /** Coverage-universe names in the same subsector, for comparative reads. */
   peers: Company[];
   findings: AgentFinding[];
   documents: IngestedDocument[];
@@ -92,7 +70,6 @@ export interface IngestedDocument {
   bytes: number;
   pages: number | null;
   characters: number;
-  /** Figures pulled out of the document text. */
   extracted: Array<{ label: string; value: string; context: string }>;
   addedAt: string;
 }
@@ -132,13 +109,6 @@ function findingId(seq: number): string {
   return `r${seq}`;
 }
 
-/**
- * Resolves free text to a company.
- *
- * The coverage universe is checked first so a name we track keeps its
- * metadata; the SEC register is the fallback and covers everything else that
- * files in the US.
- */
 export async function resolveCompany(query: string): Promise<{
   name: string;
   cik: string | null;
@@ -195,8 +165,6 @@ export async function research(
     );
   }
 
-  /* --- Filing history and XBRL financials --------------------------- */
-
   let profile: Awaited<ReturnType<typeof getProfile>>["data"] | null = null;
   const financials: FinancialSeries[] = [];
   let facts: FactLedger | null = null;
@@ -214,9 +182,6 @@ export async function research(
       );
     }
 
-    // The whole tagged history arrives in one document, so the ledger is read
-    // first and the headline series are taken from it. Fetching five concepts
-    // separately cost five round trips and returned a fifth of the material.
     try {
       facts = await getFactLedger(resolved.cik);
       sources.push(facts.provenance);
@@ -256,9 +221,6 @@ export async function research(
       }
     }
 
-    // The narrative sections carry what the tagged data cannot: who the
-    // customers are, what management says it competes against, the disclosed
-    // proceedings and the principal risks the board signed off.
     try {
       filing = await getFilingText(resolved.cik);
       if (filing) sources.push(filing.provenance);
@@ -282,17 +244,10 @@ export async function research(
     }
   }
 
-  /* --- Investor relations documents ----------------------------------- */
-
-  // Companies outside the SEC register publish the same substance on their own
-  // site. Without this the entire Indian cohort has no reported financials.
   let irQuarters: IrQuarter[] = [];
   let irUrl: string | null = null;
 
   if (resolved.inUniverse && !resolved.inUniverse.secFiler) {
-    // Crawl the company's investor relations index and read what it publishes.
-    // These are the same figures a registrant would file; they are simply
-    // served from the company's own site as a workbook or a results release.
     try {
       ir = await scrapeIr(resolved.inUniverse.symbol, 3);
       if (ir && ir.metrics.length > 0) sources.push(ir.provenance);
@@ -307,10 +262,6 @@ export async function research(
       );
     }
 
-    // Published rows are mapped onto the same concept keys the registrants use,
-    // converted to US dollars at a live fixing. Without this the whole
-    // non-registrant cohort reaches the financial workstreams with nothing, and
-    // the review reports that it is waiting for documents already downloaded.
     if (ir && ir.metrics.length > 0) {
       try {
         const fx = await getFxTable().catch(() => null);
@@ -375,8 +326,6 @@ export async function research(
     }
   }
 
-  /* --- Live market position ------------------------------------------ */
-
   let quote: Quote | null = null;
   if (resolved.symbol) {
     try {
@@ -390,8 +339,6 @@ export async function research(
     }
   }
 
-  /* --- Verified coverage ---------------------------------------------- */
-
   let news: NewsItem[] = [];
   try {
     const n = await getCompanyNews(resolved.name);
@@ -403,7 +350,6 @@ export async function research(
     );
   }
 
-  // Where SEC returned nothing, the IR series becomes the reported record.
   if (financials.length === 0 && irQuarters.length >= 2) {
     const withRevenue = irQuarters.filter((q) => q.revenueUsdMn !== null);
     if (withRevenue.length >= 2) {
@@ -457,11 +403,6 @@ export async function research(
     }
   }
 
-  /* --- Peer set --------------------------------------------------------- */
-
-  // A margin or a growth rate means little as a level. The agents that judge
-  // position need something to judge against, and the coverage universe is the
-  // comparison set the rest of the console already uses.
   const peers = resolved.inUniverse
     ? UNIVERSE.filter(
         (c) =>
@@ -469,8 +410,6 @@ export async function research(
           c.symbol !== resolved.inUniverse!.symbol,
       )
     : [];
-
-  /* --- Derived measures ------------------------------------------------ */
 
   const revenue = financials.find((f) => f.metric === "Revenue");
   const netIncome = financials.find((f) => f.metric === "Net income");
@@ -481,9 +420,6 @@ export async function research(
   const latestRevenue = latestRevenuePoint?.value ?? null;
   const firstRevenue = revenue?.points[0]?.value ?? null;
 
-  // Intervals between points, converted to years. A quarterly series compounds
-  // four times a year; treating its eight points as eight years understates
-  // growth by a factor of four and prints a nonsense label.
   const intervals = revenue ? revenue.points.length - 1 : 0;
   const yearsPerInterval = revenue?.periodType === "quarterly" ? 0.25 : 1;
   const years = Number((intervals * yearsPerInterval).toFixed(2));
@@ -493,13 +429,6 @@ export async function research(
       ? (Math.pow(latestRevenue / firstRevenue, 1 / years) - 1) * 100
       : null;
 
-  /**
-   * Ratios are only computed where numerator and denominator cover the same
-   * reporting period. Series lengths differ by concept, so taking the last
-   * point of each independently produces a figure that divides one year's
-   * profit by another year's revenue. Returning null is correct when the
-   * periods do not line up; the UI renders "Not set".
-   */
   const atPeriod = (s: FinancialSeries | undefined, period: string) =>
     s?.points.find((p) => p.period === period)?.value ?? null;
 
@@ -523,8 +452,6 @@ export async function research(
     );
   }
 
-  /* --- Findings --------------------------------------------------------- */
-
   const filingProv: Provenance[] = sources.filter((s) => s.kind === "filing");
 
   if (revenueCagrPct !== null && latestRevenue) {
@@ -545,8 +472,6 @@ export async function research(
   }
 
   if (latestOperatingMarginPct !== null) {
-    // Prior-year margin uses the prior revenue period and the operating income
-    // reported for that same period, or nothing.
     const priorRevenuePoint =
       revenue && revenue.points.length >= 2 ? revenue.points.at(-2)! : null;
     const priorOp = priorRevenuePoint

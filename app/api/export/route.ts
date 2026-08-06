@@ -9,14 +9,6 @@ import { sanitizeUserInput } from "@/lib/security/sanitize";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-/**
- * Data export.
- *
- * Everything on screen is public record, so it downloads. XLSX arrives with
- * numbers typed as numbers, ready to chart; CSV is offered for anything that
- * will be piped into another tool.
- */
-
 const PNL = [
   ["revenue", "Revenue"],
   ["costOfRevenue", "Cost of revenue"],
@@ -68,7 +60,6 @@ export async function GET(request: Request) {
   const stamp = new Date().toISOString().slice(0, 10);
   const safe = st.data.entityName.replace(/[^\w]+/g, "-").replace(/^-|-$/g, "");
 
-  // Quarterly income statement, periods across the top.
   const qSheet: Sheet = {
     name: "Quarterly P&L",
     rows: [

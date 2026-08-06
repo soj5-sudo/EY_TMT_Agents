@@ -93,7 +93,6 @@ export default function OperatingSystemPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workstream: active, company: company.trim(), documents }),
-        // A full review runs nine workstreams, so it gets the long budget.
         timeoutMs: active === "full" ? 180_000 : 90_000,
       });
       if (json.mode === "full") {

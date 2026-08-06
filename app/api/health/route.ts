@@ -4,7 +4,6 @@ import { AGENTS } from "@/lib/agents/registry";
 
 export const dynamic = "force-dynamic";
 
-/** Operational readout. Carries no market or financial data. */
 export async function GET() {
   return NextResponse.json(
     {

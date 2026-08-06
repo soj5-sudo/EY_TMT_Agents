@@ -6,16 +6,6 @@ import { Panel, Prov } from "@/components/ui/Bits";
 import { REGIONS, UNIVERSE } from "@/lib/data/universe";
 import type { Provenance } from "@/lib/core/types";
 
-/**
- * Where one company stands.
- *
- * The question behind a pitch is never what a margin is, it is whether that
- * margin is good, and that is only answerable against a stated comparison set.
- * So the cohort is named at the top and can be narrowed, because a percentile
- * is only as honest as the set behind it and a reader has to be able to object
- * to the peer group before accepting a position derived from it.
- */
-
 interface Measure {
   key: string;
   label: string;
@@ -65,12 +55,6 @@ function fmt(value: number | null, unit: string): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-/**
- * The cohort as a strip, with the subject marked.
- *
- * A rank alone hides whether the subject is narrowly behind the leader or a
- * long way off, and those are different conversations in a pitch.
- */
 function Distribution({ m }: { m: Measure }) {
   if (m.cohort.length < 2) return null;
   const values = m.cohort.map((c) => c.value);

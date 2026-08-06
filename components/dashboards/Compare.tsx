@@ -6,18 +6,6 @@ import { Panel, Prov } from "@/components/ui/Bits";
 import { UNIVERSE } from "@/lib/data/universe";
 import type { Provenance } from "@/lib/core/types";
 
-/**
- * Side by side comparison.
- *
- * Two names on one measure is the question a reader asks constantly, and the
- * alternative is running the research flow twice and reading two pages against
- * each other, which is where transcription errors enter a paper.
- *
- * The period is printed against every figure rather than once at the top,
- * because two companies rarely report to the same date and a comparison that
- * hides that reads as like for like when it is not.
- */
-
 interface Series {
   key: string;
   label: string;
@@ -60,7 +48,6 @@ function fmt(value: number | null, unit: string): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-/** A compact run of the series, so the level is read with its direction. */
 function Spark({ points, unit }: { points: Array<{ value: number }>; unit: string }) {
   if (points.length < 2) return null;
   const values = points.map((p) => p.value);
@@ -242,8 +229,6 @@ export function Compare() {
                     const values = cells
                       .map((m) => m?.latest)
                       .filter((v): v is number => v !== null && v !== undefined);
-                    // The leader is only marked where the direction is a
-                    // judgement. Research intensity has no better side.
                     const best =
                       row.betterHigh === null || values.length < 2
                         ? null

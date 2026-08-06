@@ -1,15 +1,3 @@
-/**
- * Layers 3 and 4: compose and route.
- *
- * The composer writes sentences from computed values. The router picks which
- * computation the question needs and falls back to retrieval only for the
- * questions that are genuinely about text rather than numbers.
- *
- * No hosted model sits anywhere in this path. Everything the assistant says is
- * either a figure this system computed from a filing or a passage it retrieved,
- * and both carry the source that produced them.
- */
-
 import { parseQuestion, METRICS, type MetricDef, type ParsedQuestion } from "@/lib/brain/intent";
 import {
   computeMetric,
@@ -23,16 +11,10 @@ import type { Provenance } from "@/lib/core/types";
 
 export interface BrainAnswer {
   text: string;
-  /** How the answer was produced, shown to the reader. */
   method: "computed" | "retrieved" | "none";
   sources: Provenance[];
-  /** Structured result, so the interface can render a table or chart. */
   table: Array<{ label: string; value: string; note?: string }> | null;
 }
-
-/* ---------------------------------------------------------------- *
- * Formatting
- * ---------------------------------------------------------------- */
 
 function fmt(v: number, m: MetricDef): string {
   if (m.unit === "USD") {
@@ -70,10 +52,6 @@ function dedupeSources(list: Array<Provenance | null>): Provenance[] {
   }
   return out;
 }
-
-/* ---------------------------------------------------------------- *
- * Composers
- * ---------------------------------------------------------------- */
 
 function composeMetric(values: MetricValue[]): BrainAnswer {
   const usable = values.filter((v) => v.value !== null);
@@ -203,7 +181,6 @@ function composeTrend(t: TrendResult): BrainAnswer {
   const change = last.value - first.value;
   const rising = change > 0;
 
-  // Largest single-period move, which is usually the thing worth naming.
   let biggest = { from: t.points[0], to: t.points[1], delta: t.points[1].value - t.points[0].value };
   for (let i = 1; i < t.points.length - 1; i++) {
     const d = t.points[i + 1].value - t.points[i].value;
@@ -212,9 +189,6 @@ function composeTrend(t: TrendResult): BrainAnswer {
     }
   }
 
-  // Every unit needs its own wording. Without the days and count cases a
-  // movement in receivable days printed as a bare "7.586", which reads as an
-  // unfinished sentence and undermines figures that are otherwise correct.
   const movement =
     t.metric.unit === "%"
       ? `${Math.abs(change).toFixed(1)} percentage points`
@@ -245,10 +219,6 @@ function composeTrend(t: TrendResult): BrainAnswer {
   };
 }
 
-/* ---------------------------------------------------------------- *
- * Router
- * ---------------------------------------------------------------- */
-
 const DEFAULT_METRIC = METRICS.find((m) => m.key === "operatingMargin")!;
 
 function cohortFor(parsed: ParsedQuestion): Company[] {
@@ -262,10 +232,6 @@ function cohortFor(parsed: ParsedQuestion): Company[] {
   return UNIVERSE.filter((c) => c.subsector === "IT services");
 }
 
-/**
- * Attempts a computed answer. Returns null when the question is not one the
- * computation layer can serve, which hands it to retrieval.
- */
 export async function computeAnswer(question: string): Promise<BrainAnswer | null> {
   const parsed = parseQuestion(question);
 
@@ -300,7 +266,6 @@ export async function computeAnswer(question: string): Promise<BrainAnswer | nul
       return composeMetric(values);
     }
   } catch {
-    // A computation failure is not an answer. Retrieval takes the question.
     return null;
   }
 

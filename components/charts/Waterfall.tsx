@@ -9,19 +9,9 @@ import {
   useTooltip,
 } from "./kit";
 
-/**
- * Income statement bridge.
- *
- * Reads revenue down to net income, showing each deduction as a floating bar
- * so the reader can see where the margin actually goes. Subtotals sit on the
- * baseline; deductions float between the running total before and after.
- */
-
 export interface WaterfallStep {
   label: string;
-  /** Absolute value of the line. */
   value: number;
-  /** Subtotals are drawn from zero, deductions float. */
   kind: "total" | "deduction" | "addition";
 }
 
@@ -55,7 +45,6 @@ export function Waterfall({
     );
   }
 
-  // Walk the steps to find each bar's start and end on the value axis.
   const bars: Array<{ step: WaterfallStep; from: number; to: number }> = [];
   let running = 0;
   for (const step of steps) {
@@ -121,7 +110,7 @@ export function Waterfall({
           ))}
         </g>
 
-        {/* Connectors between consecutive bars. */}
+        { }
         {bars.slice(0, -1).map((b, i) => {
           const next = bars[i + 1];
           const level = next.step.kind === "total" ? next.to : b.to;
@@ -162,7 +151,7 @@ export function Waterfall({
           <line x1={m.left} x2={m.left + plotW} y1={m.top + plotH} y2={m.top + plotH} />
         </g>
 
-        {/* Rotated labels: these names are too long to sit flat. */}
+        { }
         {bars.map((b, i) => (
           <text
             key={`l-${b.step.label}`}

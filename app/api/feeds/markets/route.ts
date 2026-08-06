@@ -5,11 +5,6 @@ import { DEFAULT_WATCH, INDICES, UNIVERSE } from "@/lib/data/universe";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-/**
- * Symbols are selected from the fixed universe by scope name, never taken
- * from the query string, so this endpoint cannot be pointed at an arbitrary
- * upstream path.
- */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const scope = url.searchParams.get("scope") ?? "watch";
@@ -46,8 +41,6 @@ export async function GET(request: Request) {
     );
   }
 
-  // Serialised for the same reason the quote sweep is: concurrent history
-  // requests on top of the sweep is the burst that gets the batch refused.
   const charted = ["ACN", "TCS.NS", "NVDA", "MSFT", "^NDX", "^CNXIT"];
   const settled = await throttledMap(charted, (s) => getSeries(s, range, "1wk"));
 

@@ -1,27 +1,3 @@
-/**
- * PDF text extraction, zero dependencies.
- *
- * Quarterly fact sheets from several filers use the standard security handler
- * at revision 6 (AES-256, /AESV3) with an empty user password, so streams must
- * be decrypted before they can be inflated.
- *
- *   /Encrypt -> file key (ISO 32000-2 alg 2.A/2.B) -> AES-256-CBC -> inflate
- *   -> keep streams carrying text operators -> parse Tj/TJ/'/" with the text
- *   matrix -> group runs into lines by page and Y
- *
- * Plain PDFs skip the first two steps. Flate is the only stream filter handled;
- * image codecs are dropped by the text-operator filter regardless.
- *
- * Investor decks embed subset fonts whose glyphs are renumbered in order of
- * first use, so a character code in the content stream is not a character. The
- * indirect objects are indexed once up front, including those packed into
- * object streams, and each font's /ToUnicode CMap is read so those codes can be
- * translated back. Codes outside a font's CMap, and fonts that carry no CMap at
- * all, pass through untouched: WinAnsi text was already correct.
- *
- * Callers check parse confidence rather than trusting output blindly.
- */
-
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 
@@ -43,17 +19,6 @@ export class PdfParseError extends Error {
 
 const EMPTY = Buffer.alloc(0);
 
-/* ------------------------------------------------------------------ *
- * Encryption
- * ------------------------------------------------------------------ */
-
-/**
- * ISO 32000-2 algorithm 2.B, the revision 6 hardened hash. Iterates AES-128-CBC
- * over a repeated block and rotates the digest between SHA-256/384/512 based on
- * the ciphertext, at least 64 rounds. The odd terminating condition is from the
- * spec verbatim: stop once at least 64 rounds have run and the final byte of the
- * last ciphertext is no greater than round - 32.
- */
 function hash2B(password: Buffer, salt: Buffer, udata: Buffer): Buffer {
   let K = crypto
     .createHash("sha256")
@@ -80,15 +45,12 @@ function hash2B(password: Buffer, salt: Buffer, udata: Buffer): Buffer {
 
     round++;
     if (round >= 64 && E[E.length - 1] <= round - 32) break;
-    // Runaway guard. The spec's loop always terminates, but a corrupt file
-    // should not spin a request handler forever.
     if (round > 512) break;
   }
 
   return K.subarray(0, 32);
 }
 
-/** Reads a PDF string object, either <hex> or (literal), into raw bytes. */
 function readStringObject(src: string, key: string): Buffer | null {
   const re = new RegExp(
     `${key}\\s*(?:<([0-9A-Fa-f\\s]+)>|\\(((?:\\\\.|[^\\\\()])*)\\))`,
@@ -145,8 +107,6 @@ function deriveFileKey(latin: string): CryptInfo | null {
   const validationSalt = U.subarray(32, 40);
   const keySalt = U.subarray(40, 48);
 
-  // Confirm the document opens with an empty user password. If a real
-  // password were required we would stop here rather than emit garbage.
   const check =
     revision === 6
       ? hash2B(EMPTY, validationSalt, EMPTY)
@@ -178,7 +138,6 @@ function deriveFileKey(latin: string): CryptInfo | null {
 }
 
 function decryptStream(raw: Buffer, fileKey: Buffer): Buffer | null {
-  // AES-CBC in PDF prefixes the 16-byte IV to the ciphertext.
   if (raw.length <= 16 || (raw.length - 16) % 16 !== 0) return null;
   try {
     const decipher = crypto.createDecipheriv(
@@ -201,10 +160,6 @@ function decryptStream(raw: Buffer, fileKey: Buffer): Buffer | null {
   }
 }
 
-/* ------------------------------------------------------------------ *
- * Content stream harvesting
- * ------------------------------------------------------------------ */
-
 function inflate(data: Buffer): Buffer | null {
   try {
     return zlib.inflateSync(data);
@@ -217,12 +172,6 @@ function inflate(data: Buffer): Buffer | null {
   }
 }
 
-/**
- * A decoded stream is treated as page content only if it contains a text
- * object. This is what keeps embedded font programs, ICC profiles and image
- * data out of the extracted text, and it is far cheaper than walking the
- * page tree to resolve every /Contents reference.
- */
 function looksLikeContent(s: string): boolean {
   if (s.length < 8) return false;
   if (!s.includes("BT")) return false;
@@ -230,17 +179,10 @@ function looksLikeContent(s: string): boolean {
 }
 
 interface StreamSlice {
-  /** Decrypted bytes, still compressed. Null when decryption failed. */
   payload: Buffer | null;
-  /** Offset of the closing "endstream" keyword. */
   stop: number;
 }
 
-/**
- * The stream's declared /Length, when the dictionary states it directly rather
- * than through a reference. Only the current object's dictionary is searched,
- * so a neighbouring object's length cannot be picked up by mistake.
- */
 function declaredLength(latin: string, kw: number): number | null {
   let head = latin.slice(Math.max(0, kw - 2048), kw);
   const obj = head.lastIndexOf("obj");
@@ -253,10 +195,6 @@ function declaredLength(latin: string, kw: number): number | null {
   return last ? Number(last[1]) : null;
 }
 
-/**
- * Reads the payload of the stream whose "stream" keyword sits at `kw`.
- * Returns null if the file ends without a closing keyword.
- */
 function readStream(
   buf: Buffer,
   latin: string,
@@ -267,9 +205,6 @@ function readStream(
   if (latin[start] === "\r") start++;
   if (latin[start] === "\n") start++;
 
-  // A stated length is exact, and exactness matters: compressed data ends in a
-  // carriage return often enough, and trimming back from the keyword eats it,
-  // leaving a truncated deflate stream that inflates to nothing.
   const declared = declaredLength(latin, kw);
   if (declared !== null && start + declared <= latin.length) {
     const at = start + declared;
@@ -288,8 +223,6 @@ function readStream(
 
   let end = stop;
   if (crypt) {
-    // An EOL sits between the data and the keyword. AES-CBC output is always
-    // a multiple of 16, so trim back until the length realigns.
     while (
       end > start &&
       (end - start) % 16 !== 0 &&
@@ -307,32 +240,20 @@ function readStream(
   return { payload: crypt ? decryptStream(raw, crypt.fileKey) : raw, stop };
 }
 
-/* ------------------------------------------------------------------ *
- * Objects, fonts and ToUnicode CMaps
- * ------------------------------------------------------------------ */
-
-/** One font's character codes, and how many bytes each code occupies. */
 interface FontMap {
   codes: Map<number, string>;
-  /** 2 for composite (Type0) fonts, whose strings pack two bytes per code. */
   codeBytes: number;
-  /** Merged maps translate only codes that could not already be text. */
   guarded: boolean;
 }
 
 interface RawObject {
-  /** Dictionary text, cut before any stream payload. */
   dict: string;
-  /** Offset of the "stream" keyword, or -1 when the object has no payload. */
   streamAt: number;
 }
 
 interface FontIndex {
-  /** Font maps keyed by the object number of the stream that uses them. */
   byStream: Map<number, Map<string, FontMap>>;
-  /** Every single-byte map merged, for streams whose fonts cannot be found. */
   merged: FontMap | null;
-  /** Object number owning the stream that begins at a given offset. */
   streamOwner: Map<number, number>;
 }
 
@@ -342,24 +263,20 @@ const EMPTY_INDEX: FontIndex = {
   streamOwner: new Map(),
 };
 
-/** A page dictionary can carry a large /Annots array; nothing needs more. */
 const DICT_LIMIT = 64 * 1024;
 
 const NAME_END = /[\s/<>[\]()]/;
 
-/** Offset just past "/key" where the dictionary names exactly that key. */
 function keyAt(src: string, key: string): number {
   for (let from = 0; ; ) {
     const i = src.indexOf("/" + key, from);
     if (i === -1) return -1;
     const after = src[i + key.length + 1];
-    // Without this test /Font would also match inside /FontDescriptor.
     if (after === undefined || NAME_END.test(after)) return i + key.length + 1;
     from = i + 1;
   }
 }
 
-/** The balanced << >> value of a key, or null when it is absent or a reference. */
 function inlineDict(src: string, key: string): string | null {
   let i = keyAt(src, key);
   if (i === -1) return null;
@@ -377,7 +294,6 @@ function inlineDict(src: string, key: string): string | null {
       i += 2;
       if (depth === 0) return src.slice(open + 2, i - 2);
     } else if (src[i] === "(") {
-      // Literal strings can hold unbalanced angle brackets, so step over them.
       i++;
       for (let nest = 1; i < src.length && nest > 0; ) {
         if (src[i] === "\\") i += 2;
@@ -392,7 +308,6 @@ function inlineDict(src: string, key: string): string | null {
   return null;
 }
 
-/** Object number of an indirect reference held under a key. */
 function refValue(src: string, key: string): number | null {
   const at = keyAt(src, key);
   if (at === -1) return null;
@@ -400,7 +315,6 @@ function refValue(src: string, key: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/** Object numbers behind a key holding either one reference or an array. */
 function refList(src: string, key: string): number[] {
   const at = keyAt(src, key);
   if (at === -1) return [];
@@ -412,7 +326,6 @@ function refList(src: string, key: string): number[] {
   return [...array[1].matchAll(/(\d+)\s+\d+\s+R/g)].map((m) => Number(m[1]));
 }
 
-/** Decodes a CMap destination, which is UTF-16BE and may be a ligature. */
 function utf16beText(hex: string): string {
   if (hex.length === 0) return "";
   if (hex.length <= 2) return String.fromCharCode(parseInt(hex, 16));
@@ -423,13 +336,6 @@ function utf16beText(hex: string): string {
   return out;
 }
 
-/**
- * Reads the bfchar and bfrange sections of a ToUnicode CMap.
- *
- * Codes are stored as numbers rather than by their source byte width, so a map
- * written as <41> and one written as <0041> index identically; the width only
- * decides how many bytes a lookup consumes from the content stream.
- */
 function parseCMap(text: string): Map<number, string> {
   const codes = new Map<number, string>();
 
@@ -464,8 +370,6 @@ function parseCMap(text: string): Map<number, string> {
 
       const base = utf16beText(m[3] ?? "");
       if (base.length === 0) continue;
-      // A range increments the last UTF-16 unit of its destination, which is
-      // how a contiguous alphabet is written as a single line.
       const head = base.slice(0, -1);
       const tail = base.charCodeAt(base.length - 1);
       for (let c = lo; c <= hi; c++) {
@@ -477,14 +381,6 @@ function parseCMap(text: string): Map<number, string> {
   return codes;
 }
 
-/**
- * Indexes every indirect object by number.
- *
- * Scanning for "N 0 obj" rather than reading the cross-reference table costs
- * nothing in accuracy here and survives the broken xref offsets that several
- * publishers ship. Binary payloads are stepped over so that byte sequences
- * inside an image cannot register as objects.
- */
 function indexObjects(
   latin: string,
   streamOwner: Map<number, number>,
@@ -517,13 +413,6 @@ function indexObjects(
   return objects;
 }
 
-/**
- * Unpacks the dictionaries held inside object streams.
- *
- * Modern producers put font and page dictionaries there, so without this step
- * a document can appear to have no fonts at all. Object streams cannot contain
- * streams, so a ToUnicode CMap is always a top-level object.
- */
 function expandObjectStreams(
   objects: Map<number, RawObject>,
   buf: Buffer,
@@ -547,7 +436,6 @@ function expandObjectStreams(
       const num = heads[2 * i];
       const at = heads[2 * i + 1];
       if (!Number.isFinite(num) || !Number.isFinite(at)) continue;
-      // A top-level definition is the newer one and keeps precedence.
       if (objects.has(num)) continue;
       const next = i + 1 < count ? heads[2 * i + 3] : text.length - first;
       const to = Number.isFinite(next) ? first + next : text.length;
@@ -556,13 +444,6 @@ function expandObjectStreams(
   }
 }
 
-/**
- * Resolves every font resource a content stream can name to its ToUnicode map.
- *
- * Resource names are only unique within one page, and subset fonts on the same
- * page routinely assign different letters to the same code, so the resolution
- * has to be per stream rather than document wide.
- */
 function buildFontIndex(
   buf: Buffer,
   latin: string,
@@ -593,8 +474,6 @@ function buildFontIndex(
     const codes = parseCMap(flat.toString("latin1"));
     if (codes.size === 0) return null;
 
-    // Simple fonts address one byte per code by definition; only a composite
-    // font packs two, which for these documents always means Identity-H.
     const map: FontMap = {
       codes,
       codeBytes: /\/Subtype\s*\/Type0/.test(font.dict) ? 2 : 1,
@@ -608,7 +487,6 @@ function buildFontIndex(
     if (/\/Type\s*\/Font/.test(obj.dict)) fontMapFor(num);
   }
 
-  /** Resources of an object, following the page tree when a page omits them. */
   const resourcesOf = (num: number): string | null => {
     let at: number | null = num;
     for (let hops = 0; at !== null && hops < 8; hops++) {
@@ -642,7 +520,6 @@ function buildFontIndex(
   const byStream = new Map<number, Map<string, FontMap>>();
   for (const [num, obj] of objects) {
     const isPage = /\/Type\s*\/Page(?!s)/.test(obj.dict);
-    // Form XObjects carry their own resources and are drawn as their own stream.
     const isForm = obj.streamAt !== -1 && /\/Subtype\s*\/Form/.test(obj.dict);
     if (!isPage && !isForm) continue;
 
@@ -656,9 +533,6 @@ function buildFontIndex(
     }
   }
 
-  // Last resort for a stream whose page could not be identified. Subset fonts
-  // in one document rarely disagree, and restricting the merge to codes that
-  // are not already printable leaves working WinAnsi text untouched.
   let merged: FontMap | null = null;
   for (const map of maps.values()) {
     if (!map || map.codeBytes !== 1) continue;
@@ -671,12 +545,7 @@ function buildFontIndex(
   return { byStream, merged, streamOwner };
 }
 
-/* ------------------------------------------------------------------ *
- * Text operator parsing
- * ------------------------------------------------------------------ */
-
 interface Run {
-  /** Index of the content stream this run came from, i.e. its page. */
   page: number;
   x: number;
   y: number;
@@ -700,21 +569,12 @@ function decodeLiteral(body: string): string {
 function decodeHex(body: string): string {
   const clean = body.replace(/[^0-9A-Fa-f]/g, "");
   let out = "";
-  // Two-digit groups are single-byte encodings; four-digit groups appear in
-  // Identity-H CID fonts. Treating pairs is correct for these documents.
   for (let i = 0; i + 1 < clean.length; i += 2) {
     out += String.fromCharCode(parseInt(clean.slice(i, i + 2), 16));
   }
   return out;
 }
 
-/**
- * Translates one string operand through the font in force.
- *
- * Anything the font does not describe is emitted as the raw byte it already
- * was, so a document whose encodings need no translation reads identically
- * whether or not a CMap was found.
- */
 function decodeWithFont(bytes: string, font: FontMap | null): string {
   if (!font) return bytes;
 
@@ -739,7 +599,6 @@ function decodeWithFont(bytes: string, font: FontMap | null): string {
   return out;
 }
 
-/** The last name operand on the stack, which is what Tf and Do take. */
 function lastName(stack: string[]): string | null {
   for (let i = stack.length - 1; i >= 0; i--) {
     if (stack[i].startsWith("/")) return stack[i].slice(1);
@@ -747,14 +606,6 @@ function lastName(stack: string[]): string | null {
   return null;
 }
 
-/**
- * Walks a content stream tracking the text matrix so runs can be grouped back
- * into visual lines. Without the Y coordinate, a table in a slide deck
- * collapses into one undifferentiated string and every row label is lost.
- *
- * `fonts` holds the maps this stream's resources name. When it is null the
- * stream could not be traced back to a page and `fallback` stands in.
- */
 function parseContent(
   content: string,
   runs: Run[],
@@ -762,7 +613,6 @@ function parseContent(
   fonts: Map<string, FontMap> | null,
   fallback: FontMap | null,
 ): void {
-  // Tokenise only what is needed: strings, arrays, numbers and operators.
   const tokenRe =
     /\((?:\\.|[^\\()])*\)|<[0-9A-Fa-f\s]*>|\[|\]|-?\d*\.?\d+|\/[^\s/<>[\]()]+|[A-Za-z'"*]+/g;
 
@@ -804,7 +654,6 @@ function parseContent(
       continue;
     }
 
-    // Operator.
     switch (tok) {
       case "BT":
         tx = ty = lineX = lineY = 0;
@@ -817,8 +666,6 @@ function parseContent(
         break;
       }
 
-      // The font belongs to the graphics state, so a save and restore pair
-      // around a heading returns the body font without naming it again.
       case "q":
         fontStack.push(font);
         pending = [];
@@ -876,13 +723,8 @@ function parseContent(
           lineY = ty = lineY - leading;
           tx = lineX;
         }
-        // Each operand is translated on its own: the elements of a TJ array
-        // are separately byte aligned, and a two-byte font would drift if the
-        // array were joined first.
         const active = font ?? (fonts === null ? fallback : null);
         const text = pending.map((p) => decodeWithFont(p, active)).join("");
-        // A run holding nothing but a space is still a word boundary. These
-        // decks set one for every gap, in its own text object.
         if (text.length > 0) {
           runs.push({ page, x: tx, y: ty, text });
         }
@@ -891,8 +733,6 @@ function parseContent(
       }
 
       default:
-        // Any other operator ends the current string accumulation so that
-        // strings belonging to non-text operators are not absorbed.
         if (tok !== "Tc" && tok !== "Tw" && tok !== "Tz") {
           pending = [];
         }
@@ -916,16 +756,8 @@ function numericTail(stack: string[], count: number): number[] | null {
   return nums.length === count ? nums : null;
 }
 
-/**
- * Groups runs into lines. Runs within Y_TOLERANCE of one another are the same
- * visual row; within a row they are ordered left to right and joined with the
- * gap widened to a double space when the horizontal jump is large, which keeps
- * table columns distinguishable downstream.
- */
 function runsToLines(runs: Run[]): string[] {
   const Y_TOLERANCE = 3;
-  // Page first. Y coordinates restart on every page, so grouping globally
-  // would splice the disclaimer on page 2 into the P&L table on page 14.
   const sorted = [...runs].sort(
     (a, b) => a.page - b.page || b.y - a.y || a.x - b.x,
   );
@@ -944,19 +776,12 @@ function runsToLines(runs: Run[]): string[] {
       if (prevEnd !== null) {
         const gap = r.x - prevEnd;
         const pad = gap > 24 ? "   " : gap > 2 ? " " : "";
-        // A drawn space already separates the two runs, so a word gap must not
-        // be added on top of it: two spaces read as a column break downstream.
         const separated = /\s$/.test(line) || /^\s/.test(r.text);
         line += separated && pad === " " ? "" : pad;
       }
       line += r.text;
-      // Rough advance estimate. Precise widths would need the font metrics,
-      // which is more machinery than the grouping heuristic warrants.
       prevEnd = r.x + r.text.length * 5;
     }
-    // Both ends: a decoded space run can now open a row, and a leading blank
-    // would read as an empty leading column to anything splitting on runs of
-    // whitespace.
     const trimmed = line.trim();
     if (trimmed.trim().length > 0) lines.push(trimmed);
     bucket = [];
@@ -986,10 +811,6 @@ function runsToLines(runs: Run[]): string[] {
   return lines;
 }
 
-/* ------------------------------------------------------------------ *
- * Entry point
- * ------------------------------------------------------------------ */
-
 export function extractPdfText(input: Uint8Array): ExtractResult {
   const buf = Buffer.from(input);
   if (buf.subarray(0, 5).toString("latin1") !== "%PDF-") {
@@ -1007,8 +828,6 @@ export function extractPdfText(input: Uint8Array): ExtractResult {
   try {
     index = buildFontIndex(buf, latin, crypt);
   } catch {
-    // A font table that cannot be read costs the reader nothing: extraction
-    // continues on raw character codes, which is what it did before.
   }
 
   const runs: Run[] = [];
@@ -1020,7 +839,6 @@ export function extractPdfText(input: Uint8Array): ExtractResult {
     const kw = latin.indexOf("stream", idx);
     if (kw === -1) break;
 
-    // Skip the tail of an "endstream" keyword.
     if (latin.startsWith("endstream", kw - 3)) {
       idx = kw + 6;
       continue;

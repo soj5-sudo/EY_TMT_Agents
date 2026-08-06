@@ -9,13 +9,6 @@ import type { NewsItem, Quote } from "@/lib/core/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 
-/**
- * Question answering.
- *
- * The live context is best-effort. If the news or market feeds are down the
- * index is still built from the static corpus, so the assistant keeps working
- * on filing and product questions rather than failing wholesale.
- */
 export async function POST(request: Request) {
   let body: unknown;
   try {

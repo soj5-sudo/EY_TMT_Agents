@@ -1,20 +1,6 @@
-/**
- * Publisher allowlist.
- *
- * Only outlets listed here reach the dashboards or the retrieval index.
- * Everything else is dropped at ingestion, which is what keeps aggregator
- * rewrites, content farms and press-release wire spam out of the analysis.
- *
- * Tier 1  Primary and wire. Regulatory filings, exchange notices, the company
- *         itself, and the four global wires.
- * Tier 2  Established financial and business press with named editorial staff.
- * Tier 3  Specialist trade press. Accurate on sector detail, narrower remit.
- */
-
 export type SourceTier = 1 | 2 | 3;
 
 export interface Publisher {
-  /** Registrable domain, matched as a suffix against the article host. */
   domain: string;
   name: string;
   tier: SourceTier;
@@ -22,7 +8,6 @@ export interface Publisher {
 }
 
 export const PUBLISHERS: Publisher[] = [
-  // Tier 1: primary and wire
   { domain: "sec.gov", name: "US Securities and Exchange Commission", tier: 1, region: "US" },
   { domain: "nseindia.com", name: "National Stock Exchange of India", tier: 1, region: "India" },
   { domain: "bseindia.com", name: "BSE India", tier: 1, region: "India" },
@@ -35,7 +20,6 @@ export const PUBLISHERS: Publisher[] = [
   { domain: "businesswire.com", name: "Business Wire", tier: 1, region: "Global" },
   { domain: "globenewswire.com", name: "GlobeNewswire", tier: 1, region: "Global" },
 
-  // Tier 2: established financial and business press
   { domain: "ft.com", name: "Financial Times", tier: 2, region: "Global" },
   { domain: "wsj.com", name: "The Wall Street Journal", tier: 2, region: "US" },
   { domain: "cnbc.com", name: "CNBC", tier: 2, region: "US" },
@@ -61,7 +45,6 @@ export const PUBLISHERS: Publisher[] = [
   { domain: "handelsblatt.com", name: "Handelsblatt", tier: 2, region: "Europe" },
   { domain: "lesechos.fr", name: "Les Echos", tier: 2, region: "Europe" },
 
-  // Tier 3: specialist trade press
   { domain: "techcrunch.com", name: "TechCrunch", tier: 3, region: "Global" },
   { domain: "theregister.com", name: "The Register", tier: 3, region: "Global" },
   { domain: "arstechnica.com", name: "Ars Technica", tier: 3, region: "Global" },
@@ -89,7 +72,6 @@ export const PUBLISHERS: Publisher[] = [
 
 const INDEX = new Map<string, Publisher>(PUBLISHERS.map((p) => [p.domain, p]));
 
-/** Resolves an article URL to a known publisher, or null if unrecognised. */
 export function identifyPublisher(url: string): Publisher | null {
   let host: string;
   try {

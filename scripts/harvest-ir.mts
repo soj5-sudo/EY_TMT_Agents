@@ -1,17 +1,3 @@
-/**
- * Investor relations snapshot generator.
- *
- * Several publishers refuse datacentre IP ranges, so the harvest succeeds from
- * a workstation and fails from a serverless host. Rather than lose the data,
- * this runs the harvest where it works and writes the result into the repo. The
- * application still attempts a live fetch first and only falls back to this
- * file, which is labelled with the date it was taken so nobody mistakes it for
- * a live figure.
- *
- * Run before a deploy:
- *   node --experimental-strip-types scripts/harvest-ir.mts
- */
-
 import { writeFileSync } from "node:fs";
 import { IR_SOURCES, parseIrQuarter, type IrQuarter } from "../lib/feeds/ir-parse.ts";
 import { extractPdfText } from "../lib/pdf/extract.ts";

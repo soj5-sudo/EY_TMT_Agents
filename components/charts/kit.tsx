@@ -2,23 +2,6 @@
 
 import { useCallback, useRef, useState } from "react";
 
-/**
- * Chart primitives.
- *
- * Hand-built rather than pulled from a charting library, for three reasons that
- * mattered here: the content security policy admits no external origin, so a
- * CDN build was never an option; the visual language has to match the rest of
- * the console exactly, and library defaults fight that at every turn; and the
- * bundle stays small enough that the console loads instantly on a local run.
- *
- * Everything below is deterministic given its props. Interaction state is the
- * hovered index and the set of hidden series, nothing more.
- */
-
-/* ------------------------------------------------------------------ *
- * Scales
- * ------------------------------------------------------------------ */
-
 export interface Scale {
   (value: number): number;
   invert(pixel: number): number;
@@ -42,11 +25,6 @@ export function linearScale(
   return fn;
 }
 
-/**
- * Produces axis ticks on values a reader recognises: 1, 2, 2.5, 5 and 10 times
- * a power of ten. An axis labelled 0, 173.4, 346.8 is technically correct and
- * unreadable.
- */
 export function niceTicks(min: number, max: number, count = 5): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
     return [min];
@@ -67,13 +45,11 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
   const start = Math.ceil(min / step) * step;
   const ticks: number[] = [];
   for (let v = start; v <= max + step * 0.001; v += step) {
-    // Guard against binary drift producing 0.30000000000000004.
     ticks.push(Number(v.toPrecision(12)));
   }
   return ticks;
 }
 
-/** Pads a domain so the extremes are not flush against the plot edge. */
 export function padDomain(
   min: number,
   max: number,
@@ -88,10 +64,6 @@ export function padDomain(
   const lo = zeroFloor && min >= 0 ? 0 : min - pad;
   return [lo, max + pad];
 }
-
-/* ------------------------------------------------------------------ *
- * Formatting
- * ------------------------------------------------------------------ */
 
 export function fmtNumber(v: number, digits = 0): string {
   return v.toLocaleString("en-US", {
@@ -120,10 +92,6 @@ export const SERIES_COLORS = [
   "var(--seq-5)",
 ];
 
-/* ------------------------------------------------------------------ *
- * Tooltip
- * ------------------------------------------------------------------ */
-
 export interface TooltipState {
   x: number;
   y: number;
@@ -143,8 +111,6 @@ export function useTooltip() {
       className="tooltip"
       role="status"
       style={{
-        // Flip to the left of the cursor near the right edge so the panel
-        // never forces a horizontal scrollbar.
         left: tip.x,
         top: tip.y,
         transform:
@@ -174,10 +140,6 @@ export function useTooltip() {
 
   return { tip, show, hide, node, hostRef };
 }
-
-/* ------------------------------------------------------------------ *
- * Frame
- * ------------------------------------------------------------------ */
 
 export function ChartFrame({
   height,
@@ -280,10 +242,6 @@ export function XLabels({
   );
 }
 
-/* ------------------------------------------------------------------ *
- * Legend with series toggling
- * ------------------------------------------------------------------ */
-
 export function useSeriesToggle(keys: string[]) {
   const [hidden, setHidden] = useState<Set<string>>(new Set());
 
@@ -292,8 +250,6 @@ export function useSeriesToggle(keys: string[]) {
       setHidden((prev) => {
         const next = new Set(prev);
         if (next.has(key)) next.delete(key);
-        // Refuse to hide the last visible series: an empty chart reads as a
-        // bug rather than a choice.
         else if (next.size < keys.length - 1) next.add(key);
         return next;
       });

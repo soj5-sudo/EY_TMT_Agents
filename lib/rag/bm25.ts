@@ -1,22 +1,10 @@
-/**
- * Okapi BM25, k1 = 1.2, b = 0.75, with a title field boost.
- *
- * Lexical rather than dense retrieval: the corpus is dominated by proper nouns
- * and figures ("BFSI", "Q1 FY27", "722,750") which are matched literally, and
- * it needs no model file or API key.
- */
-
 export interface RagDoc {
   id: string;
-  /** Short heading, weighted more heavily than body text. */
   title: string;
   body: string;
-  /** Which dashboard or dataset this passage belongs to. */
   section: string;
-  /** Human-readable citation, rendered under an answer. */
   source: string;
   url?: string;
-  /** True when the text originated outside this application. */
   untrusted: boolean;
 }
 
@@ -30,11 +18,6 @@ const K1 = 1.2;
 const B = 0.75;
 const TITLE_BOOST = 2.5;
 
-/**
- * Terms carrying no discriminative value in this corpus. Kept short on
- * purpose: an over-eager stop list removes "up", "down" and "growth", which
- * are meaningful words in a financial question.
- */
 const STOP = new Set([
   "a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "is", "are",
   "was", "were", "be", "been", "it", "its", "this", "that", "these", "those",
@@ -42,13 +25,6 @@ const STOP = new Set([
   "did", "can", "could", "would", "should", "please", "tell", "me", "show",
 ]);
 
-/**
- * Tokeniser.
- *
- * Numbers keep their separators collapsed so "722,750" and "722750" both
- * match, and percentages keep their sign, because "-4.0" and "4.0" are
- * different answers.
- */
 export function tokenize(text: string): string[] {
   const lowered = text.toLowerCase();
   const out: string[] = [];
@@ -59,7 +35,6 @@ export function tokenize(text: string): string[] {
   while ((m = re.exec(lowered)) !== null) {
     let t = m[0];
     if (/^-?\d/.test(t)) {
-      // Numeric token. Index both the formatted and bare forms.
       const bare = t.replace(/,/g, "").replace(/%$/, "");
       out.push(bare);
       if (bare !== t) out.push(t.replace(/,/g, ""));
@@ -68,7 +43,6 @@ export function tokenize(text: string): string[] {
     t = t.replace(/^[-']+|[-']+$/g, "");
     if (t.length < 2 || STOP.has(t)) continue;
     out.push(t);
-    // Crude singularisation so "margins" finds "margin".
     if (t.length > 4 && t.endsWith("s") && !t.endsWith("ss")) {
       out.push(t.slice(0, -1));
     }
@@ -79,7 +53,6 @@ export function tokenize(text: string): string[] {
 
 interface IndexedDoc {
   doc: RagDoc;
-  /** Term to frequency, with the title boost already folded in. */
   tf: Map<string, number>;
   length: number;
 }
@@ -113,7 +86,6 @@ export class Bm25Index {
     for (const d of docs) this.add(d);
   }
 
-  /** Must be called after the last add and before the first search. */
   finalise(): void {
     const total = this.docs.reduce((sum, d) => sum + d.length, 0);
     this.avgLength = this.docs.length > 0 ? total / this.docs.length : 0;
@@ -123,7 +95,6 @@ export class Bm25Index {
     return this.docs.length;
   }
 
-  /** Documents in a given section, in corpus order. */
   bySection(section: string): RagDoc[] {
     return this.docs.filter((d) => d.doc.section === section).map((d) => d.doc);
   }
@@ -147,8 +118,6 @@ export class Bm25Index {
         if (!f) continue;
 
         const n = this.df.get(term) ?? 0;
-        // Okapi IDF. The +1 keeps it positive for terms appearing in more
-        // than half the corpus, which would otherwise score negatively.
         const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
 
         const denom =

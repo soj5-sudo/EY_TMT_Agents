@@ -94,7 +94,6 @@ export default function KpiPage() {
       );
       setPeers(json);
     } catch {
-      // Benchmarking is additive. Its absence does not block the page.
     } finally {
       setPeersBusy(false);
     }

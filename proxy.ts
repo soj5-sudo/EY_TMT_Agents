@@ -8,21 +8,7 @@ import {
   type LimitKind,
 } from "@/lib/security/guard";
 
-/**
- * Edge gate.
- *
- * Runs before any route handler or page render. Order is deliberate: identify
- * the client, decide whether it is automated, then apply the budget for the
- * class of resource being requested. Refusals are plain text with a Retry-After
- * so an honest client can back off, and they carry no data.
- *
- * Lives in proxy.ts rather than middleware.ts: Next 16 renamed the convention
- * and the old filename is deprecated.
- */
-
 export const config = {
-  // Static assets and the Next internals are excluded: they carry no data
-  // worth protecting and gating them only costs latency on every page.
   matcher: ["/((?!_next/static|_next/image|favicon.ico|robots.txt).*)"],
 };
 
@@ -42,8 +28,6 @@ export default function proxy(request: NextRequest) {
 
   const assessment = assessClient(request.headers);
 
-  // Automated clients are refused outright rather than throttled. Throttling
-  // an extraction service just makes it slower, not unsuccessful.
   if (assessment.automated) {
     return new NextResponse(
       "Automated access is not permitted.\n" +
@@ -60,7 +44,6 @@ export default function proxy(request: NextRequest) {
     );
   }
 
-  // The JSON APIs answer this application's own pages only.
   if (pathname.startsWith("/api/") && !sameOrigin(request)) {
     return NextResponse.json(
       { error: "Cross-origin requests are not accepted by this endpoint." },
@@ -88,7 +71,6 @@ export default function proxy(request: NextRequest) {
   for (const [k, v] of Object.entries(rateLimitHeaders(limit))) {
     response.headers.set(k, v);
   }
-  // Data responses are never stored by a shared cache.
   if (pathname.startsWith("/api/")) {
     response.headers.set("Cache-Control", "no-store, private");
   }

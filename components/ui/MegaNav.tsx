@@ -75,7 +75,6 @@ export function MegaNav() {
 
   const close = useCallback(() => setOpen(false), []);
 
-  // Route change closes the panel.
   useEffect(() => {
     setOpen(false);
   }, [pathname]);

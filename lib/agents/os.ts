@@ -1,17 +1,3 @@
-/**
- * Workstream execution.
- *
- * One shared record is assembled first, then every agent in the workstream reads
- * from it. Agents do not call each other; the record is the interface, which is
- * what keeps a run reproducible and lets any agent be replaced without touching
- * the others.
- *
- * An agent returns findings, gaps, or both. A finding carries evidence. A gap
- * names the document that would close it and who normally holds it. Nothing is
- * inferred to fill a hole, because a fabricated finding in a committee paper is
- * worse than an open item on a request list.
- */
-
 import { randomUUID } from "node:crypto";
 import type { Provenance } from "@/lib/core/types";
 import { nowIso } from "@/lib/core/types";
@@ -43,11 +29,8 @@ export interface Gap {
   id: string;
   agentId: string;
   agentName: string;
-  /** What is missing. */
   item: string;
-  /** Why the seat cannot proceed without it. */
   blocks: string;
-  /** Who normally holds this document. */
   requestFrom: string;
   priority: "high" | "medium" | "low";
 }
@@ -60,7 +43,6 @@ export interface SeatResult {
   status: "complete" | "partial" | "blocked";
   findings: Finding[];
   gaps: Gap[];
-  /** Evidence kinds the seat had available. */
   evidenceUsed: EvidenceKind[];
   evidenceMissing: EvidenceKind[];
   handsTo: string[];
@@ -79,15 +61,10 @@ export interface WorkstreamRun {
   seats: SeatResult[];
   findings: Finding[];
   gaps: Gap[];
-  /** Seats whose output requires sign-off before the workstream closes. */
   gates: Array<{ agentId: string; agentName: string; role: string }>;
   summary: string;
   dossier: CompanyDossier;
 }
-
-/* ------------------------------------------------------------------ *
- * Evidence availability
- * ------------------------------------------------------------------ */
 
 function availableEvidence(d: CompanyDossier): Set<EvidenceKind> {
   const set = new Set<EvidenceKind>();
@@ -100,7 +77,6 @@ function availableEvidence(d: CompanyDossier): Set<EvidenceKind> {
   return set;
 }
 
-/** Who normally holds a given class of evidence. */
 const HOLDER: Record<EvidenceKind, string> = {
   "public-filings": "Public register. Available for registrants only.",
   "market-data": "Market data feed. Listed subjects only.",
@@ -109,7 +85,6 @@ const HOLDER: Record<EvidenceKind, string> = {
   "prior-findings": "Earlier workstream in this run.",
 };
 
-/** The document a reviewer would actually ask for, per evidence class. */
 const EVIDENCE_REQUEST: Record<EvidenceKind, string> = {
   "public-filings": "Audited statutory accounts, three years",
   "market-data": "Comparable transaction set or a traded reference",
@@ -125,10 +100,6 @@ const GAP_REQUEST: Record<EvidenceKind, string> = {
   "provided-documents": "Management or vendor data room",
   "prior-findings": "Run the preceding workstream first",
 };
-
-/* ------------------------------------------------------------------ *
- * Helpers
- * ------------------------------------------------------------------ */
 
 function usd(v: number): string {
   const a = Math.abs(v);
@@ -187,21 +158,6 @@ class Emitter {
   }
 }
 
-/* ------------------------------------------------------------------ *
- * Seat implementations
- *
- * Every agent has one, in lib/agents/analysis. Each computes from the shared
- * record rather than restating its own remit: a ratio, a comparison against
- * the peer set, a disclosed sentence from the annual report, or a figure from
- * a file the company published. Where the evidence for an agent's question is
- * genuinely not public it raises a specific request naming the document and
- * who holds it, which is the honest output in that case.
- * ------------------------------------------------------------------ */
-
-/* ------------------------------------------------------------------ *
- * Default seat behaviour
- * ------------------------------------------------------------------ */
-
 function runDefaultSeat(agent: AgentDef, available: Set<EvidenceKind>, e: Emitter): void {
   const missing = agent.needs.filter((n) => !available.has(n));
 
@@ -224,19 +180,11 @@ function runDefaultSeat(agent: AgentDef, available: Set<EvidenceKind>, e: Emitte
   }
 }
 
-/* ------------------------------------------------------------------ *
- * Runner
- * ------------------------------------------------------------------ */
-
 export async function runWorkstream(
   workstreamId: WorkstreamId,
   company: string,
   documents: IngestedDocument[] = [],
-  /** Findings from earlier workstreams. Seats that reconcile across the run
-   *  read these; without them Consistency and Adversary have nothing to work
-   *  against and a full review degrades into ten unrelated reports. */
   carried: Finding[] = [],
-  /** Reuse an assembled record instead of rebuilding it per workstream. */
   prebuilt?: CompanyDossier,
 ): Promise<WorkstreamRun> {
   const ws = getWorkstream(workstreamId);
@@ -267,16 +215,7 @@ export async function runWorkstream(
       );
     }
 
-    // Every agent has an implementation, so producing neither a finding nor a
-    // request means the implementation returned nothing rather than that there
-    // was nothing to say. That is a defect in this console, and it is reported
-    // as one instead of being papered over with a restatement of the remit.
     if (emitter.findings.length === 0) {
-      // The agent asked its question and the issuer does not report the
-      // measures it needs. Saying which measures those were, and what the
-      // issuer publishes instead, is a factual answer rather than a
-      // restatement of the remit, and it is what lets a reader judge whether
-      // the missing figure is worth chasing for this particular subject.
       scopeReport(agent.id, agent.name, dossier, emitter);
     }
 
@@ -351,7 +290,6 @@ export async function runWorkstream(
   };
 }
 
-/** Order the lifecycle executes in. Monitoring is post-close and excluded. */
 const LIFECYCLE: WorkstreamId[] = [
   "context",
   "screening",
@@ -374,14 +312,6 @@ export interface FullReview {
   summary: string;
 }
 
-/**
- * Runs the lifecycle end to end, carrying findings forward.
- *
- * The record is assembled once and shared, so the whole review costs one
- * research pass rather than nine. Each workstream sees everything the previous
- * ones produced, which is what lets Consistency cross-check and Adversary argue
- * against the assembled case rather than against a single step.
- */
 export async function runFullReview(
   company: string,
   documents: IngestedDocument[] = [],

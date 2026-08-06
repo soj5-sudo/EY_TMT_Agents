@@ -1,20 +1,3 @@
-"""
-Reads the two published tracker workbooks into typed datasets.
-
-Both are Google Sheets shared for public read, so they export as xlsx over a
-plain request with no key and no account. They are the source of truth for
-things no filing carries in machine readable form: what management said about a
-quarter, why a metric moved, and which document the reader can check it in.
-
-The console computes figures from filings on every request. This is different
-material and is treated as such: it is a curated quarterly record, it carries
-its own source line per cell, and it is stamped with the date it was read so
-nothing here is ever shown as though it arrived this morning.
-
-Run:
-    npm run ingest:sheets
-"""
-
 from __future__ import annotations
 
 import io
@@ -34,7 +17,6 @@ PEERS_ID = "1GCmWWKcNa4VTt86gJu43QRv7T2WT3DhcNaCb2mJYeXI"
 
 UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"}
 
-
 def fetch(sheet_id: str) -> openpyxl.Workbook:
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
     req = urllib.request.Request(url, headers=UA)
@@ -42,12 +24,10 @@ def fetch(sheet_id: str) -> openpyxl.Workbook:
         data = r.read()
     return openpyxl.load_workbook(io.BytesIO(data), data_only=True)
 
-
 def text(v) -> str:
     if v is None:
         return ""
     return re.sub(r"\s+", " ", str(v)).strip()
-
 
 def num(v):
     if v is None or isinstance(v, str):
@@ -58,42 +38,25 @@ def num(v):
     except (TypeError, ValueError):
         return None
 
-
 def clean_name(v: str) -> str:
-    """Sheet names carry footnote markers and trailing spaces."""
-    return re.sub(r"\s*\d?$", "", text(v)).replace(" Limited", "").replace(" Technology", "").strip()
+        return re.sub(r"\s*\d?$", "", text(v)).replace(" Limited", "").replace(" Technology", "").strip()
 
-
-# Which sheet carries which measure, and where its numbers sit. Column indexes
-# are zero based against the header row found by locating "Companies".
 METRIC_SHEETS = [
-    # sheet, key, prior col, latest col, unit
     ("Revenue", "revenueUsdM", 1, 2, "USD m"),
     ("Hiring", "headcountK", 1, 2, "thousands"),
     ("Attrition", "attritionPct", 1, 2, "share"),
     ("Cap Utilization", "utilisationPct", 1, 2, "share"),
 ]
 
-
 def find_header(rows) -> tuple[int, int] | tuple[None, None]:
-    """
-    Locates the header row and the column the company names start in.
-
-    These sheets are laid out for reading rather than for parsing: most begin
-    with a blank spacer column, so the first cell of the header row is empty and
-    "Companies" sits one or two columns in. Assuming column zero returns nothing
-    at all and looks exactly like an empty sheet.
-    """
-    for i, r in enumerate(rows[:40]):
+        for i, r in enumerate(rows[:40]):
         for j, c in enumerate(r[:6]):
             if text(c).lower().startswith("companie"):
                 return i, j
     return None, None
 
-
 def cell(r, i: int) -> object:
     return r[i] if i < len(r) else None
-
 
 def read_metric_sheet(wb, sheet: str, prior_col: int, latest_col: int):
     ws = wb[sheet]
@@ -118,10 +81,8 @@ def read_metric_sheet(wb, sheet: str, prior_col: int, latest_col: int):
         }
     return out, periods
 
-
 def read_margins(wb):
-    """The margin sheet is two measures side by side under a merged banner."""
-    ws = wb["EBIT and EBITDA margins"]
+        ws = wb["EBIT and EBITDA margins"]
     rows = list(ws.iter_rows(values_only=True))
     header, base = find_header(rows)
     if header is None:
@@ -143,10 +104,8 @@ def read_margins(wb):
         }
     return out, periods
 
-
 def read_narrative(wb, sheet: str, limit: int = 60):
-    """Sheets that are prose per company rather than a number per company."""
-    if sheet not in wb.sheetnames:
+        if sheet not in wb.sheetnames:
         return []
     ws = wb[sheet]
     out = []
@@ -160,7 +119,6 @@ def read_narrative(wb, sheet: str, limit: int = 60):
             break
     return out
 
-
 VERTICALS = {
     "IT Services": "IT services",
     "E R&D": "Engineering R and D",
@@ -168,7 +126,6 @@ VERTICALS = {
     "Data Analytics": "Data analytics",
     "Contract centre-BPO KPO": "Contact centre",
 }
-
 
 def read_peers(wb):
     out = []
@@ -230,9 +187,7 @@ def read_peers(wb):
             )
     return out
 
-
 TIER1 = {"TCS", "Infosys", "Wipro", "HCL Tech", "Tech Mahindra"}
-
 
 def main() -> int:
     print("fetching the quarterly tracker")
@@ -385,7 +340,6 @@ def main() -> int:
     print(f"\nwrote lib/data/sector-tracker.ts: {len(rows)} companies")
     print(f"wrote lib/data/peer-universe.ts: {len(peers)} companies")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

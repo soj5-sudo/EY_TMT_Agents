@@ -86,8 +86,6 @@ export default function FinancialsPage() {
   }, [symbol, load]);
 
   const quarterly = (data?.quarters?.length ?? 0) > 0;
-  // 20-F filers tag no quarterly statements, so the annual series is the
-  // reported record. Same page, same table, different period length.
   const quarters: QuarterRow[] = quarterly
     ? data!.quarters
     : (data?.years ?? []).map((y) => ({

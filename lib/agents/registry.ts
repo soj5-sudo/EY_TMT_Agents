@@ -1,19 +1,3 @@
-/**
- * Agent registry.
- *
- * The unit of work is not a prompt, it is an agent. Each agent has a defined role,
- * a declared evidence contract, and a named handoff to the agent after it. That
- * is what makes a run repeatable: the same company through the same workstream
- * produces the same structure of output every time, and any figure can be
- * traced back to the agent and the source that produced it.
- *
- * An agent emits one of two things. A finding, which is backed by evidence and
- * carries its provenance. Or a gap, which names the document that would close
- * it. An agent that lacks evidence never guesses; it raises the request. That is
- * how a real diligence checklist behaves and it is the reason output from this
- * system is usable in a committee paper.
- */
-
 export type WorkstreamId =
   | "context"
   | "screening"
@@ -31,7 +15,6 @@ export interface Workstream {
   step: string;
   name: string;
   purpose: string;
-  /** What a reviewer should be able to conclude once this workstream closes. */
   closes: string;
 }
 
@@ -118,7 +101,6 @@ export const WORKSTREAMS: Workstream[] = [
   },
 ];
 
-/** What an agent needs before it can produce anything. */
 export type EvidenceKind =
   | "public-filings"
   | "market-data"
@@ -134,17 +116,13 @@ export interface AgentSkill {
 
 export interface AgentDef {
   id: string;
-  /** Short working name. This is what appears on the agent in the console. */
   name: string;
   workstream: WorkstreamId;
   role: string;
-  /** Why the agent exists. What goes wrong when nobody holds it. */
   why: string;
   skills: AgentSkill[];
   needs: EvidenceKind[];
-  /** Agents this one hands its output to. */
   handsTo: string[];
-  /** True when a person must sign the output before the workstream advances. */
   humanGate: boolean;
 }
 
@@ -155,7 +133,6 @@ const s = (id: string, name: string, summary: string): AgentSkill => ({
 });
 
 export const AGENTS: AgentDef[] = [
-  /* ---------------- 00 Context ---------------- */
   {
     id: "search",
     name: "Search",
@@ -205,7 +182,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: false,
   },
 
-  /* ---------------- 01 Screening ---------------- */
   {
     id: "screen",
     name: "Screen",
@@ -268,7 +244,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: false,
   },
 
-  /* ---------------- 02 Commercial ---------------- */
   {
     id: "market",
     name: "Market",
@@ -345,7 +320,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: false,
   },
 
-  /* ---------------- 03 Financial ---------------- */
   {
     id: "revenue-quality",
     name: "Revenue quality",
@@ -422,7 +396,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: true,
   },
 
-  /* ---------------- 04 Operational ---------------- */
   {
     id: "operations",
     name: "Operations",
@@ -499,7 +472,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: false,
   },
 
-  /* ---------------- 05 Legal ---------------- */
   {
     id: "legal-structure",
     name: "Structure",
@@ -576,7 +548,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: false,
   },
 
-  /* ---------------- 06 People ---------------- */
   {
     id: "management",
     name: "Management",
@@ -653,7 +624,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: false,
   },
 
-  /* ---------------- 07 ESG ---------------- */
   {
     id: "esg-risk",
     name: "ESG risk",
@@ -715,7 +685,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: false,
   },
 
-  /* ---------------- 08 Synthesis ---------------- */
   {
     id: "valuation",
     name: "Valuation",
@@ -793,7 +762,6 @@ export const AGENTS: AgentDef[] = [
     humanGate: true,
   },
 
-  /* ---------------- 09 Monitoring ---------------- */
   {
     id: "kpi-intake",
     name: "KPI intake",

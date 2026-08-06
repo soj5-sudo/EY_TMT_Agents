@@ -6,11 +6,6 @@ export const maxDuration = 120;
 
 const MAX_FILES_PER_REQUEST = 5;
 
-/**
- * Parses uploaded files and returns the result. Nothing is retained: the
- * browser holds the parsed documents and posts them back with the next
- * research call.
- */
 export async function POST(request: Request) {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.includes("multipart/form-data")) {

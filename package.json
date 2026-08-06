@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "train:intent": "node --experimental-strip-types --import ./scripts/alias.mjs scripts/train-intent.mts",
     "harvest:ir": "node --experimental-strip-types --import ./scripts/alias.mjs scripts/harvest-ir-ledgers.mts",
-    "discover:ir": "scraper/.venv/bin/python scraper/discover_ir.py"
+    "discover:ir": "scraper/.venv/bin/python scraper/discover_ir.py",
+    "ingest:sheets": "scraper/.venv/bin/python scraper/ingest_sheets.py"
   },
   "dependencies": {
     "next": "^16.3.0",

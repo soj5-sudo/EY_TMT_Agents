@@ -13,7 +13,7 @@ import {
   StatBlock,
   StatRow,
 } from "@/components/ui/Bits";
-import { SECTORS, THEME_LABELS as THEME_LABEL } from "@/lib/data/universe";
+import { REGIONS, SECTORS, THEME_LABELS as THEME_LABEL } from "@/lib/data/universe";
 import { apiFetch } from "@/lib/client/api";
 import type { NewsItem, Provenance } from "@/lib/core/types";
 
@@ -85,6 +85,7 @@ export function SectorSignal() {
   const [newsError, setNewsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [sector, setSector] = useState("All");
+  const [region, setRegion] = useState("All");
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [openTheme, setOpenTheme] = useState<string | null>(null);
 
@@ -111,13 +112,26 @@ export function SectorSignal() {
     load();
   }, [load]);
 
-  const rows = useMemo(
+  // Everything the sector and region filters admit, whether or not it reports
+  // figures. The count rings are drawn from this, because a company with no
+  // public numbers still occupies a position in the sector and leaving it out
+  // would make the coverage map answer a different question from the one asked.
+  const selected = useMemo(
     () =>
       (data?.rows ?? [])
         .filter((r) => sector === "All" || r.sector === sector)
+        .filter((r) => region === "All" || r.region === region),
+    [data, sector, region],
+  );
+
+  // The subset carrying reported figures. Revenue rings and the table read from
+  // this, since a share of nothing is not a share.
+  const rows = useMemo(
+    () =>
+      selected
         .filter((r) => r.revenue !== null)
         .sort((a, b) => (b[sortKey] ?? -1e18) - (a[sortKey] ?? -1e18)),
-    [data, sector, sortKey],
+    [selected, sortKey],
   );
 
   const totalRevenue = rows.reduce((s, r) => s + (r.revenue ?? 0), 0);
@@ -140,7 +154,7 @@ export function SectorSignal() {
   // the thing a reader is looking for when they ask what is covered.
   const themeCountSlices = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of rows) {
+    for (const r of selected) {
       for (const t of r.themes) {
         const label = (THEME_LABEL as Record<string, string>)[t] ?? t;
         map.set(label, (map.get(label) ?? 0) + 1);
@@ -149,17 +163,17 @@ export function SectorSignal() {
     return [...map.entries()]
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => b.value - a.value);
-  }, [rows]);
+  }, [selected]);
 
   const themePlacements = themeCountSlices.reduce((s, x) => s + x.value, 0);
 
   const subsectorCountSlices = useMemo(() => {
     const map = new Map<string, number>();
-    for (const r of rows) map.set(r.subsector, (map.get(r.subsector) ?? 0) + 1);
+    for (const r of selected) map.set(r.subsector, (map.get(r.subsector) ?? 0) + 1);
     return [...map.entries()]
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => b.value - a.value);
-  }, [rows]);
+  }, [selected]);
 
   const median = (xs: number[]) => {
     if (!xs.length) return null;
@@ -234,20 +248,52 @@ export function SectorSignal() {
               />
             </StatRow>
 
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-              <span className="t-label" style={{ fontSize: 10 }}>Sector</span>
-              {["All", ...SECTORS].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  className="chip"
-                  data-active={sector === s}
-                  onClick={() => setSector(s)}
-                  aria-pressed={sector === s}
-                >
-                  {s}
-                </button>
-              ))}
+            <div className="filter-bar" style={{ padding: 0, border: 0, gap: 8 }}>
+              <div className="filter-row">
+                <span className="t-label filter-row-label">Sector</span>
+                <div className="filter-row-chips">
+                  {["All", ...SECTORS].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className="chip"
+                      data-active={sector === s}
+                      onClick={() => setSector(s)}
+                      aria-pressed={sector === s}
+                    >
+                      {s}
+                      {s !== "All" && (
+                        <span className="chip-count">
+                          {(data?.rows ?? []).filter((r) => r.sector === s && (region === "All" || r.region === region)).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="filter-row">
+                <span className="t-label filter-row-label">Region</span>
+                <div className="filter-row-chips">
+                  {["All", ...REGIONS].map((rg) => (
+                    <button
+                      key={rg}
+                      type="button"
+                      className="chip"
+                      data-active={region === rg}
+                      onClick={() => setRegion(rg)}
+                      aria-pressed={region === rg}
+                    >
+                      {rg}
+                      {rg !== "All" && (
+                        <span className="chip-count">
+                          {(data?.rows ?? []).filter((r) => r.region === rg && (sector === "All" || r.sector === sector)).length}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div style={{ display: "grid", gap: 24, gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))" }}>
@@ -288,7 +334,7 @@ export function SectorSignal() {
               >
                 <Donut
                   slices={subsectorCountSlices}
-                  total={rows.length}
+                  total={selected.length}
                   totalLabel="Companies"
                   format={(v) => `${v}`}
                   caption="Counts the coverage universe rather than its revenue, so a small company weighs the same as a large one."
@@ -305,7 +351,7 @@ export function SectorSignal() {
                   total={themePlacements}
                   totalLabel="Theme positions"
                   format={(v) => `${v}`}
-                  caption={`${rows.length} companies across ${themeCountSlices.length} themes. Exposure is assigned from what each company sells, not from what it says about itself.`}
+                  caption={`${selected.length} companies across ${themeCountSlices.length} themes. Exposure is assigned from what each company sells, not from what it says about itself.`}
                 />
               </Panel>
             </div>

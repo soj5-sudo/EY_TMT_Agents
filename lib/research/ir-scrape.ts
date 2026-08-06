@@ -24,6 +24,7 @@ import { fetchBuffer, fetchText } from "@/lib/core/fetcher";
 import { xlsxText, XlsxError } from "@/lib/research/xlsx";
 import { extractPdfText, PdfParseError } from "@/lib/pdf/extract";
 import { nowIso, type Provenance } from "@/lib/core/types";
+import { IR_DISCOVERED } from "@/lib/data/ir-discovered";
 
 const INDEX_TTL_MS = 6 * 60 * 60 * 1000;
 const DOC_TTL_MS = 24 * 60 * 60 * 1000;
@@ -79,9 +80,12 @@ export const IR_INDEXES: IrIndex[] = [
   {
     symbol: "TECHM.NS",
     name: "Tech Mahindra",
+    // The quarterly earnings page carries a full KPI workbook: six sheets and
+    // a quarter by quarter grid running from FY2016. The investors landing
+    // page links only shareholder notices.
     urls: [
+      "https://www.techmahindra.com/investors/quarterly-earnings/",
       "https://www.techmahindra.com/en-in/investors/",
-      "https://www.techmahindra.com/investors/",
     ],
   },
   {
@@ -97,10 +101,88 @@ export const IR_INDEXES: IrIndex[] = [
   {
     symbol: "LTIM.NS",
     name: "LTIMindtree",
+    // The file list is built in the browser, so a plain request sees nothing.
+    // The harvest renders it; the deployment falls back to what was harvested.
     urls: [
       "https://www.ltimindtree.com/investors/financial-results/",
       "https://www.ltimindtree.com/investors/",
     ],
+  },
+  {
+    symbol: "COFORGE.NS",
+    name: "Coforge Limited",
+    // The investor site is hosted separately from the corporate one, which is
+    // why the corporate path returned only a modern slavery statement.
+    urls: ["https://investors.coforge.com/quarter-reports", "https://investors.coforge.com/"],
+  },
+  {
+    symbol: "PERSISTENT.NS",
+    name: "Persistent Systems",
+    urls: [
+      "https://www.persistent.com/investors/quarterly-results/",
+      "https://www.persistent.com/investors/",
+    ],
+  },
+  {
+    symbol: "CAP.PA",
+    name: "Capgemini SE",
+    urls: ["https://investors.capgemini.com/en/financial-results/", "https://investors.capgemini.com/en/"],
+  },
+  {
+    symbol: "EXPN.L",
+    name: "Experian plc",
+    urls: [
+      "https://www.experianplc.com/investors/results-reports-presentations/results-presentations",
+      "https://www.experianplc.com/investors/",
+    ],
+  },
+  {
+    symbol: "ATE.PA",
+    name: "Alten SA",
+    urls: ["https://www.alten.com/investors/", "https://www.alten.com/finance/"],
+  },
+  {
+    symbol: "ZENSARTECH.NS",
+    name: "Zensar Technologies",
+    urls: ["https://www.zensar.com/investors"],
+  },
+  {
+    symbol: "BSOFT.NS",
+    name: "Birlasoft Limited",
+    urls: [
+      "https://www.birlasoft.com/company/investors/policies-reports-filings",
+      "https://www.birlasoft.com/company/investors",
+    ],
+  },
+  {
+    symbol: "MASTEK.NS",
+    name: "Mastek Limited",
+    urls: ["https://www.mastek.com/investors/financial-information/", "https://www.mastek.com/investors/"],
+  },
+  {
+    symbol: "DATAMATICS.NS",
+    name: "Datamatics Global Services",
+    urls: ["https://www.datamatics.com/about-us/investor-relations/financials"],
+  },
+  {
+    symbol: "RSYSTEMS.NS",
+    name: "R Systems International",
+    urls: ["https://www.rsystems.com/investors-info/"],
+  },
+  {
+    symbol: "HAPPSTMNDS.NS",
+    name: "Happiest Minds Technologies",
+    urls: ["https://www.happiestminds.com/investors/"],
+  },
+  {
+    symbol: "SAKSOFT.NS",
+    name: "Saksoft Limited",
+    urls: ["https://www.saksoft.com/investor/financials/", "https://www.saksoft.com/investors/"],
+  },
+  {
+    symbol: "KELLTONTEC.NS",
+    name: "Kellton Tech Solutions",
+    urls: ["https://www.kellton.com/financial-results", "https://www.kellton.com/investors"],
   },
 ];
 
@@ -163,8 +245,11 @@ function score(filename: string, kind: IrDocRef["kind"], period: string | null):
   if (period) s += 30;
 
   // Recency, read from the fiscal year in the name.
-  const y = n.match(/(?:fy|20)(\d{2})\b/);
-  if (y) s += Math.min(30, Number(y[1]));
+  // Newest first. The year is matched with optional separators because
+  // publishers write "q1fy25" and "q1-fy-27" for the same thing, and matching
+  // only the tight form silently prefers a two year old file.
+  const y = n.match(/f\s*y[ _-]?(\d{2})\b/) ?? n.match(/\b20(\d{2})\b/);
+  if (y) s += Math.min(34, Number(y[1]));
 
   // Things that are published on the same page but are not results.
   if (/policy|code[ _-]?of|charter|notice|intimation|disclosure|transcript|ppt|presentation|esg|sustainab|agm|postal|scrutin|newspaper|advertis/.test(n))
@@ -181,12 +266,52 @@ function absolute(href: string, indexUrl: string, base?: string): string | null 
   }
 }
 
+interface DiscoveredIndex {
+  indexUrl: string;
+  mode: string;
+  files: string[];
+}
+
+/**
+ * Files a rendered pass already found for this company.
+ *
+ * Several of these sites build their file list in the browser, so crawling the
+ * index with a plain request finds nothing and the company appears to publish
+ * no results at all. The rendered pass runs in the harvest, where a browser is
+ * available, and writes down what it saw. Using its list here means the
+ * deployment reads the same documents without needing to render anything.
+ */
+function discoveredFor(symbol: string): DiscoveredIndex | null {
+  const hit = IR_DISCOVERED[symbol];
+  return hit && hit.files.length > 0 ? hit : null;
+}
+
 /** Crawls the index pages and returns the candidate files, best first. */
 export async function discoverIrDocuments(index: IrIndex): Promise<{
   indexUrl: string;
   docs: IrDocRef[];
 }> {
   const res = await cached(`ir:index:${index.symbol}`, INDEX_TTL_MS, async () => {
+    // The rendered pass and the plain crawl are combined rather than one
+    // replacing the other. They find different things: rendering reaches a
+    // list that only exists in the browser, while the plain crawl of the
+    // company's own index sometimes carries files the rendered page does not
+    // link. Preferring either one alone loses a company that the other covers.
+    const seen = new Set<string>();
+    const docs: IrDocRef[] = [];
+
+    const add = (abs: string) => {
+      if (seen.has(abs)) return;
+      seen.add(abs);
+      const filename = decodeURIComponent(abs.split("/").pop() ?? "").slice(0, 160);
+      const kind: IrDocRef["kind"] = /\.xlsx?(\?|$)/i.test(filename) ? "workbook" : "document";
+      const period = readPeriod(filename);
+      docs.push({ url: abs, filename, kind, period, score: score(filename, kind, period) });
+    };
+
+    const pre = discoveredFor(index.symbol);
+    if (pre) for (const abs of pre.files) add(abs);
+
     for (const url of index.urls) {
       let html: string;
       try {
@@ -200,26 +325,22 @@ export async function discoverIrDocuments(index: IrIndex): Promise<{
         continue;
       }
 
-      const seen = new Set<string>();
-      const docs: IrDocRef[] = [];
-
       for (const m of html.matchAll(FILE_LINK)) {
         const abs = absolute(m[1], url, index.base);
-        if (!abs || seen.has(abs)) continue;
-        seen.add(abs);
-
-        const filename = decodeURIComponent(abs.split("/").pop() ?? "").slice(0, 160);
-        const kind: IrDocRef["kind"] = /\.xlsx?$/i.test(filename) ? "workbook" : "document";
-        const period = readPeriod(filename);
-        docs.push({ url: abs, filename, kind, period, score: score(filename, kind, period) });
+        if (abs) add(abs);
       }
 
       if (docs.length > 0) {
         docs.sort((a, b) => b.score - a.score);
-        return { indexUrl: url, docs: docs.slice(0, 60) };
+        return { indexUrl: pre?.indexUrl ?? url, docs: docs.slice(0, 60) };
       }
     }
-    return { indexUrl: index.urls[0], docs: [] as IrDocRef[] };
+
+    docs.sort((a, b) => b.score - a.score);
+    return {
+      indexUrl: pre?.indexUrl ?? index.urls[0],
+      docs: docs.slice(0, 60),
+    };
   });
 
   return res.value;

@@ -33,7 +33,7 @@ export interface Company {
   short: string;
   sector: Sector;
   subsector: Subsector;
-  region: "US" | "India" | "Europe" | "Asia";
+  region: "US" | "India" | "Europe" | "Canada" | "Asia";
   currency: "USD" | "INR" | "EUR" | "GBP";
   themes: Theme[];
   /** Set when the company files with the SEC, which enables the filings agent. */
@@ -63,6 +63,29 @@ export const UNIVERSE: Company[] = [
   { symbol: "COFORGE.NS", name: "Coforge Limited", short: "Coforge", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
   { symbol: "PERSISTENT.NS", name: "Persistent Systems", short: "Persistent", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "ai-software"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
   { symbol: "CAP.PA", name: "Capgemini SE", short: "Capgemini", sector: "Technology", subsector: "IT services", region: "Europe", currency: "EUR", themes: ["digital-transformation"], secFiler: false, coverageNote: "Publishes results only through a JavaScript-rendered investor relations site, which serves no file link to a plain request. Not an SEC registrant, so there is no filed record either." },
+
+  // --- IT services, added from the wider peer set ----------------------
+  // Comparable names outside the original coverage list. Each was added only
+  // after its reported figures were located and read: the ones that file are
+  // read from the register, the rest from the results file their own site
+  // publishes. Where a company reports in a currency other than dollars, the
+  // currency recorded here is what its own statements are stated in.
+  { symbol: "ADP", name: "Automatic Data Processing", short: "ADP", sector: "Technology", subsector: "Software and platforms", region: "US", currency: "USD", themes: ["digital-transformation", "cloud"], secFiler: true },
+  { symbol: "IQV", name: "IQVIA Holdings", short: "IQVIA", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation", "ai-software"], secFiler: true },
+  { symbol: "GIB", name: "CGI Inc", short: "CGI", sector: "Technology", subsector: "IT services", region: "Canada", currency: "USD", themes: ["digital-transformation"], secFiler: true },
+  { symbol: "GLOB", name: "Globant SA", short: "Globant", sector: "Technology", subsector: "IT services", region: "Europe", currency: "USD", themes: ["digital-transformation", "ai-software"], secFiler: true },
+  { symbol: "DAVA", name: "Endava plc", short: "Endava", sector: "Technology", subsector: "IT services", region: "Europe", currency: "USD", themes: ["digital-transformation"], secFiler: true },
+  { symbol: "EXPN.L", name: "Experian plc", short: "Experian", sector: "Technology", subsector: "IT services", region: "Europe", currency: "USD", themes: ["digital-transformation", "ai-software"], secFiler: false },
+  { symbol: "ATE.PA", name: "Alten SA", short: "Alten", sector: "Technology", subsector: "IT services", region: "Europe", currency: "EUR", themes: ["digital-transformation"], secFiler: false },
+  { symbol: "TWKS", name: "Thoughtworks Holding", short: "Thoughtworks", sector: "Technology", subsector: "IT services", region: "US", currency: "USD", themes: ["digital-transformation"], secFiler: false, coverageNote: "Taken private in 2024, so it no longer files periodic reports and publishes no investor site. The last public figures are its final filed quarter." },
+  { symbol: "ZENSARTECH.NS", name: "Zensar Technologies", short: "Zensar", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
+  { symbol: "BSOFT.NS", name: "Birlasoft Limited", short: "Birlasoft", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
+  { symbol: "MASTEK.NS", name: "Mastek Limited", short: "Mastek", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "cloud"], secFiler: false },
+  { symbol: "DATAMATICS.NS", name: "Datamatics Global Services", short: "Datamatics", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
+  { symbol: "RSYSTEMS.NS", name: "R Systems International", short: "R Systems", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "ai-software"], secFiler: false },
+  { symbol: "HAPPSTMNDS.NS", name: "Happiest Minds Technologies", short: "Happiest Minds", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation", "ai-software"], secFiler: false },
+  { symbol: "SAKSOFT.NS", name: "Saksoft Limited", short: "Saksoft", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
+  { symbol: "KELLTONTEC.NS", name: "Kellton Tech Solutions", short: "Kellton", sector: "Technology", subsector: "IT services", region: "India", currency: "INR", themes: ["digital-transformation"], secFiler: false },
 
   // --- Software and platforms -----------------------------------------
   { symbol: "MSFT", name: "Microsoft Corporation", short: "Microsoft", sector: "Technology", subsector: "Software and platforms", region: "US", currency: "USD", themes: ["ai-software", "ai-agents", "cloud"], secFiler: true },
@@ -144,7 +167,7 @@ export const SECTORS: Sector[] = ["Technology", "Media", "Telecom"];
  * cohort this console is built around, so it sits with the two western blocs
  * rather than behind them in an alphabetical list nobody reads to the end of.
  */
-export const REGIONS: Company["region"][] = ["US", "Europe", "India", "Asia"];
+export const REGIONS: Company["region"][] = ["US", "Europe", "India", "Canada", "Asia"];
 
 export function bySector(sector: Sector): Company[] {
   return UNIVERSE.filter((c) => c.sector === sector);

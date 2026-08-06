@@ -280,7 +280,52 @@ export function buildLedgerFromIr(
   // scraper already ordered files best first.
   const claimed = new Set<FactKey>();
 
-  for (const metric of scrape.metrics) {
+  // A ledger has to be internally consistent before it is large. Publishers
+  // issue a dollar sheet beside a rupee one, and rows picked freely across
+  // both put a rupee numerator over a dollar denominator: Persistent's margin
+  // came out at nought point nought percent from an EBIT in rupees divided by
+  // a revenue in dollars, and both figures were individually correct. So one
+  // currency is chosen, the one carrying revenue, and money rows stated in any
+  // other are left out. Counts are exempt because they are not money.
+  const currencyVotes = new Map<string, { count: number; hasRevenue: boolean }>();
+  for (const m of scrape.metrics) {
+    const k = matchKey(m.label);
+    if (!k || k === "employees" || RATIO_ROW.test(m.label)) continue;
+    const cur = m.unit?.currency ?? declaredCurrency;
+    if (!cur) continue;
+    const held = currencyVotes.get(cur) ?? { count: 0, hasRevenue: false };
+    held.count += 1;
+    if (k === "revenue") held.hasRevenue = true;
+    currencyVotes.set(cur, held);
+  }
+
+  const chosenCurrency =
+    [...currencyVotes.entries()]
+      .sort((a, b) => {
+        // Only a currency that carries revenue can anchor the ledger, since
+        // every ratio is taken against it.
+        if (a[1].hasRevenue !== b[1].hasRevenue) return a[1].hasRevenue ? -1 : 1;
+        // Among those, the publisher's own dollar sheet is preferred: it needs
+        // no conversion, so nothing rests on a rate fixed on a later date.
+        const aUsd = a[0] === "USD";
+        const bUsd = b[0] === "USD";
+        if (aUsd !== bUsd) return aUsd ? -1 : 1;
+        return b[1].count - a[1].count;
+      })
+      .at(0)?.[0] ?? null;
+
+  // Rows outside the chosen currency are removed before anything claims a
+  // concept. Filtering afterwards lets a row take the revenue slot and then be
+  // dropped, which leaves the ledger with no revenue at all and every ratio
+  // built on it silently absent.
+  const eligible = scrape.metrics.filter((m) => {
+    const k = matchKey(m.label);
+    if (k === "employees") return true;
+    const cur = m.unit?.currency ?? declaredCurrency;
+    return chosenCurrency === null || cur === chosenCurrency;
+  });
+
+  for (const metric of eligible) {
     const key = matchKey(metric.label);
     if (!key || claimed.has(key)) continue;
     if (RATIO_ROW.test(metric.label)) continue;

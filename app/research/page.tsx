@@ -6,6 +6,7 @@ import { Delta, NotSet, PageHeader, Panel, Prov, Stack, StatBlock, StatRow } fro
 import { SourceList } from "@/components/ui/SourceList";
 import type { AgentFinding, NewsItem, Provenance, Quote } from "@/lib/core/types";
 import { useDocuments } from "@/lib/client/documents";
+import { Compare } from "@/components/dashboards/Compare";
 import { apiFetch } from "@/lib/client/api";
 
 interface FinancialSeries {
@@ -188,6 +189,8 @@ export default function ResearchPage() {
             </div>
           </form>
         </Panel>
+
+        <Compare />
 
         <Panel
           title="Private records"

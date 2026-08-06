@@ -13,7 +13,7 @@ import {
   StatBlock,
   StatRow,
 } from "@/components/ui/Bits";
-import { SECTORS } from "@/lib/data/universe";
+import { SECTORS, THEME_LABELS as THEME_LABEL } from "@/lib/data/universe";
 import { apiFetch } from "@/lib/client/api";
 import type { NewsItem, Provenance } from "@/lib/core/types";
 
@@ -134,6 +134,33 @@ export function SectorSignal() {
     return [...map.entries()].map(([label, value]) => ({ label, value }));
   }, [rows]);
 
+  // Every tracked company counted once against each theme it carries, which is
+  // what makes this the coverage map rather than a revenue split: a name with
+  // no reported figures still occupies a position in the sector and is exactly
+  // the thing a reader is looking for when they ask what is covered.
+  const themeCountSlices = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      for (const t of r.themes) {
+        const label = (THEME_LABEL as Record<string, string>)[t] ?? t;
+        map.set(label, (map.get(label) ?? 0) + 1);
+      }
+    }
+    return [...map.entries()]
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [rows]);
+
+  const themePlacements = themeCountSlices.reduce((s, x) => s + x.value, 0);
+
+  const subsectorCountSlices = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of rows) map.set(r.subsector, (map.get(r.subsector) ?? 0) + 1);
+    return [...map.entries()]
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [rows]);
+
   const median = (xs: number[]) => {
     if (!xs.length) return null;
     const s = [...xs].sort((a, b) => a - b);
@@ -249,6 +276,36 @@ export function SectorSignal() {
                   totalLabel="Coverage revenue"
                   format={(v) => bn(v)}
                   caption="Region reflects the listing venue. Geographic revenue split is on the KPI dashboard where a company discloses it."
+                />
+              </Panel>
+            </div>
+
+            <div style={{ display: "grid", gap: 24, gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))" }}>
+              <Panel
+                title="Companies by segment"
+                hint="Every tracked name counted once, including those whose figures are not public."
+                actions={<Prov p={data.provenance} />}
+              >
+                <Donut
+                  slices={subsectorCountSlices}
+                  total={rows.length}
+                  totalLabel="Companies"
+                  format={(v) => `${v}`}
+                  caption="Counts the coverage universe rather than its revenue, so a small company weighs the same as a large one."
+                />
+              </Panel>
+
+              <Panel
+                title="Companies by theme"
+                hint="A company carrying several themes is counted against each, so the total exceeds the number of names."
+                actions={<Prov p={data.provenance} />}
+              >
+                <Donut
+                  slices={themeCountSlices}
+                  total={themePlacements}
+                  totalLabel="Theme positions"
+                  format={(v) => `${v}`}
+                  caption={`${rows.length} companies across ${themeCountSlices.length} themes. Exposure is assigned from what each company sells, not from what it says about itself.`}
                 />
               </Panel>
             </div>

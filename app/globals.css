@@ -1886,3 +1886,130 @@ a {
 @media (max-width: 620px) {
   .donut-wrap { justify-content: center; }
 }
+
+/* ---------------------------------------------------------------- *
+ * Comparison
+ *
+ * The period sits under every figure rather than once in the header,
+ * because two companies rarely report to the same date and a table that
+ * hides that invites a like-for-like reading it has not earned.
+ * ---------------------------------------------------------------- */
+
+.cmp-suggest {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--ey-white);
+  border: 1px solid var(--ey-grey-light);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.cmp-suggest-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--ey-grey-pale);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: var(--ey-charcoal);
+}
+
+.cmp-suggest-item:last-child { border-bottom: 0; }
+.cmp-suggest-item:hover { background: var(--ey-off-white); }
+
+.cmp-table th { vertical-align: bottom; }
+
+.cmp-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cmp-value {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmp-value[data-best="true"] {
+  font-weight: 700;
+  box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+.cmp-period {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ey-grey);
+}
+
+/* ---------------------------------------------------------------- *
+ * Coverage filters
+ *
+ * Four dimensions stacked rather than crowded onto one line. A reader
+ * scans down the labels to find the axis they want; putting them all in
+ * one wrapping row makes every chip look like it belongs to the same
+ * question.
+ * ---------------------------------------------------------------- */
+
+.filter-bar {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border-hairline);
+  display: grid;
+  gap: 10px;
+}
+
+.filter-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-search .input { flex: 1 1 auto; }
+
+.filter-count {
+  font-size: 12px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--ey-grey);
+}
+
+.filter-clear { flex: 0 0 auto; }
+
+.filter-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.filter-row-label {
+  font-size: 10px;
+  flex: 0 0 64px;
+  color: var(--ey-grey);
+}
+
+.filter-row-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+}
+
+button.source-tag {
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+@media (max-width: 720px) {
+  .filter-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .filter-row-label { flex: none; }
+  .filter-search { flex-wrap: wrap; }
+}

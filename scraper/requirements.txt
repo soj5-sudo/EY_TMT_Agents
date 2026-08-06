@@ -1,0 +1,8 @@
+# Rendered scraping for investor relations sites that build their file list in
+# the browser. A plain request returns the page shell with no link in it, so
+# these companies have no source at all without a real browser.
+#
+# This runs in the harvest, never in the deployed app: the app is zero
+# dependency TypeScript on a serverless host and cannot carry Python or a
+# browser. The harvest commits what it reads, and the commit is the deploy.
+scrapling[fetchers]==0.4.12

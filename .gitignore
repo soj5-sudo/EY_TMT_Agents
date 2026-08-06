@@ -19,3 +19,5 @@ next-env.d.ts
 /data/cache/
 /data/artifacts/
 *.tsbuildinfo
+scraper/.venv/
+scraper/*.log

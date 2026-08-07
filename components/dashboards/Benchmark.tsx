@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/client/api";
-import { Panel, Prov } from "@/components/ui/Bits";
+import { NotSet, Panel, Prov } from "@/components/ui/Bits";
 import { REGIONS, UNIVERSE } from "@/lib/data/universe";
 import type { Provenance } from "@/lib/core/types";
 
@@ -315,7 +315,7 @@ export function Benchmark() {
                               {m.best.short} {fmt(m.best.value, m.unit)}
                             </span>
                           ) : (
-                            <span className="t-small">n/a</span>
+                            <NotSet />
                           )}
                         </td>
                       </tr>

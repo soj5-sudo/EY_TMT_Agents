@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { LineChart, type LineSeries } from "@/components/charts/LineChart";
-import { Panel } from "@/components/ui/Bits";
+import { NotSet, Panel } from "@/components/ui/Bits";
 import {
   HEADCOUNT_YOY,
   HISTORY,
@@ -88,7 +88,7 @@ export function SectorHistory() {
                     <td style={{ whiteSpace: "nowrap" }}>{s.cohort}</td>
                     {s.values.map((v, i) => (
                       <td key={active.periods[i]} className="num tnum" style={{ fontSize: 11 }}>
-                        {v === null ? "n/a" : fmt(v, active.unit)}
+                        {v === null ? <NotSet /> : fmt(v, active.unit)}
                       </td>
                     ))}
                   </tr>
@@ -154,7 +154,7 @@ export function SectorHistory() {
                             color: down ? "var(--negative, #b3261e)" : up ? "var(--positive, #1a7f5a)" : undefined,
                           }}
                         >
-                          {v === null ? "n/a" : `${v.toFixed(1)}%`}
+                          {v === null ? <NotSet /> : `${v.toFixed(1)}%`}
                         </td>
                       );
                     })}

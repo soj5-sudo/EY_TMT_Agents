@@ -2,6 +2,7 @@ import { cached } from "@/lib/core/cache";
 import { fetchBuffer, fetchText } from "@/lib/core/fetcher";
 import { xlsxText, XlsxError } from "@/lib/research/xlsx";
 import { extractPdfText, PdfParseError } from "@/lib/pdf/extract";
+import { parseNarrativeMetrics } from "@/lib/research/ir-narrative";
 import { nowIso, type Provenance } from "@/lib/core/types";
 import { IR_DISCOVERED } from "@/lib/data/ir-discovered";
 
@@ -187,13 +188,14 @@ function score(filename: string, kind: IrDocRef["kind"], period: string | null):
   if (/key[ _-]?(financial|metric)|metrics/.test(n)) s += 40;
   if (/quarterly|results|earnings|financial/.test(n)) s += 25;
   if (/press[ _-]?release|investor[ _-]?release/.test(n)) s += 20;
+  if (/transcript/.test(n)) s += 15;
   if (/annual[ _-]?report/.test(n)) s += 10;
   if (period) s += 30;
 
   const y = n.match(/f\s*y[ _-]?(\d{2})\b/) ?? n.match(/\b20(\d{2})\b/);
-  if (y) s += Math.min(34, Number(y[1]));
+  if (y) s += Math.min(34, Number(y[1])) * 2;
 
-  if (/policy|code[ _-]?of|charter|notice|intimation|disclosure|transcript|ppt|presentation|esg|sustainab|agm|postal|scrutin|newspaper|advertis/.test(n))
+  if (/policy|code[ _-]?of|charter|notice|intimation|disclosure|esg|sustainab|agm|postal|scrutin|newspaper|advertis|subsidiar/.test(n))
     s -= 70;
 
   return s;
@@ -285,6 +287,8 @@ export interface IrMetric {
   unit: IrUnit | null;
   unitFromLabel: boolean;
   structured?: boolean;
+  /** Set when the figure was read from a sentence rather than a table. */
+  derivedFrom?: string;
 }
 
 const CURRENCY_HINT: Array<[RegExp, string]> = [
@@ -379,6 +383,49 @@ function readSerialHeader(cells: string[]): string[] | null {
   return out;
 }
 
+const FISCAL_YEAR = /^FY\s?((?:19|20)\d{2})\s?[-/]\s?(\d{2})$/i;
+const QUARTER_CELL = /^(Q[1-4]|[1-4]Q|Total|Full[ _-]?Year|FY)$/i;
+
+/**
+ * A data sheet often heads its columns twice: the fiscal year on one row, the
+ * quarter on the next, with the year written once per group of columns. This
+ * pairs the two rows back together so each column carries a whole period.
+ */
+function readYearGroupHeader(previous: string[] | null, cells: string[]): string[] | null {
+  if (!previous) return null;
+
+  const quarters = cells.filter((c) => QUARTER_CELL.test(c)).length;
+  if (quarters < 4 || quarters < cells.length - 1) return null;
+
+  const years: string[] = [];
+  for (const c of previous) {
+    const m = c.match(FISCAL_YEAR);
+    if (!m) continue;
+    const label = `FY${m[1].slice(0, 2)}${m[2]}`;
+    if (years.at(-1) !== label) years.push(label);
+  }
+  if (years.length < 2) return null;
+
+  const out: string[] = [];
+  let group = -1;
+  for (const cell of cells) {
+    if (/^(?:Q1|1Q)$/i.test(cell)) group += 1;
+    const year = years[Math.max(0, group)];
+    if (!year) {
+      out.push("");
+      continue;
+    }
+    if (/^(?:Total|Full[ _-]?Year|FY)$/i.test(cell)) {
+      out.push(year);
+      continue;
+    }
+    const q = cell.match(/^Q?([1-4])Q?$/i);
+    out.push(q ? `Q${q[1]} ${year}` : "");
+  }
+
+  return out.some((c) => c !== "") ? out : null;
+}
+
 function toNumber(raw: string): number | null {
   const s = raw.trim();
   if (!s || s === "-" || s === "NA" || s === "N/A") return null;
@@ -397,6 +444,7 @@ export function parseWorkbookMetrics(text: string): {
   const lines = text.split("\n");
   let header: string[] | null = null;
   let unit: IrUnit | null = null;
+  let previous: string[] | null = null;
   const metrics: IrMetric[] = [];
   const allPeriods = new Set<string>();
 
@@ -405,7 +453,16 @@ export function parseWorkbookMetrics(text: string): {
     if (hint) unit = hint;
 
     const rawCells = line.split("|").map((c) => c.trim());
+    const held = previous;
+    previous = rawCells;
     if (rawCells.length < 2) continue;
+
+    const paired = readYearGroupHeader(held, rawCells);
+    if (paired) {
+      header = paired;
+      for (const c of paired) if (c) allPeriods.add(c);
+      continue;
+    }
 
     const yearHeader = readYearHeader(rawCells);
     if (yearHeader) {
@@ -508,7 +565,18 @@ export async function readIrDocument(doc: IrDocRef): Promise<IrReadResult> {
         .map((l) => l.replace(/\s{2,}/g, " | "))
         .join("\n");
       const { metrics, periods } = parseWorkbookMetrics(asGrid);
-      return { size: bytes.byteLength, sheets: extracted.pageCount, metrics, periods, structured: false };
+      const spoken = parseNarrativeMetrics(extracted.lines.join("\n"));
+      const held = new Set(metrics.map((m) => m.label.toLowerCase()));
+      const merged = [...metrics, ...spoken.filter((m) => !held.has(m.label.toLowerCase()))];
+      const allPeriods = new Set(periods);
+      for (const m of spoken) for (const v of m.values) allPeriods.add(v.period);
+      return {
+        size: bytes.byteLength,
+        sheets: extracted.pageCount,
+        metrics: merged,
+        periods: [...allPeriods],
+        structured: false,
+      };
     });
 
     const v = res.value;
@@ -572,6 +640,7 @@ export async function scrapeIr(symbol: string, limit = 3): Promise<IrScrapeResul
           unit: m.unit,
           unitFromLabel: m.unitFromLabel,
           structured: m.structured,
+          derivedFrom: m.derivedFrom,
         });
       } else if (sameUnit(held.unit, m.unit)) {
         for (const v of m.values) {

@@ -39,7 +39,7 @@ def num(v):
         return None
 
 def clean_name(v: str) -> str:
-        return re.sub(r"\s*\d?$", "", text(v)).replace(" Limited", "").replace(" Technology", "").strip()
+    return re.sub(r"\s*\d?$", "", text(v)).replace(" Limited", "").replace(" Technology", "").strip()
 
 METRIC_SHEETS = [
     ("Revenue", "revenueUsdM", 1, 2, "USD m"),
@@ -49,7 +49,7 @@ METRIC_SHEETS = [
 ]
 
 def find_header(rows) -> tuple[int, int] | tuple[None, None]:
-        for i, r in enumerate(rows[:40]):
+    for i, r in enumerate(rows[:40]):
         for j, c in enumerate(r[:6]):
             if text(c).lower().startswith("companie"):
                 return i, j
@@ -82,7 +82,7 @@ def read_metric_sheet(wb, sheet: str, prior_col: int, latest_col: int):
     return out, periods
 
 def read_margins(wb):
-        ws = wb["EBIT and EBITDA margins"]
+    ws = wb["EBIT and EBITDA margins"]
     rows = list(ws.iter_rows(values_only=True))
     header, base = find_header(rows)
     if header is None:
@@ -105,7 +105,7 @@ def read_margins(wb):
     return out, periods
 
 def read_narrative(wb, sheet: str, limit: int = 60):
-        if sheet not in wb.sheetnames:
+    if sheet not in wb.sheetnames:
         return []
     ws = wb[sheet]
     out = []

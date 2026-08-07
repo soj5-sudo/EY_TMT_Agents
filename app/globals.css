@@ -2305,3 +2305,53 @@ button.source-tag {
 .pe-first { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); }
 .pe-val { flex: 0 0 72px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) { .pe-name { flex-basis: 96px; } }
+
+/* A ranked bar that is also the filter control, so the reader picks a state
+   by clicking the thing they were already reading. */
+.st-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--ey-grey-pale);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.st-row:hover { background: var(--ey-grey-pale); }
+.st-row[data-active="true"] { background: var(--ey-grey-pale); }
+.st-name { flex: 0 0 130px; font-size: 12px; color: var(--ey-charcoal); }
+.st-track { position: relative; flex: 1 1 auto; height: 10px; background: var(--ey-grey-pale); }
+.st-fill { position: absolute; inset: 0 auto 0 0; background: var(--ey-grey); }
+.st-fill[data-active="true"] { background: var(--ey-charcoal); }
+.st-val { flex: 0 0 68px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.st-count { flex: 0 0 26px; text-align: right; font-size: 11px; opacity: 0.6; }
+.st-live {
+  margin-left: 6px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+@media (max-width: 640px) { .st-name { flex-basis: 92px; } }
+
+/* A quote from the call, set apart from the console's own prose so the
+   reader can see where the company stops speaking and we start. */
+.trk-quote {
+  margin: 10px 0 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--ey-charcoal);
+}
+.trk-quote-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ey-charcoal);
+}
+.trk-quote-by {
+  margin: 4px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}

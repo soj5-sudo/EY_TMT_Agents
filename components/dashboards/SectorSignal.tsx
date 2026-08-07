@@ -47,8 +47,19 @@ interface ThemeAgg {
   members: Array<{ short: string; growth: number | null; margin: number | null }>;
 }
 
+interface PeerRow {
+  name: string;
+  segment: string;
+  vertical: string;
+  headquarters: string;
+  revenue: number | null;
+  period: string;
+}
+
 interface SectorPayload {
   rows: SectorRow[];
+  peers: PeerRow[];
+  peersTakenAt: string;
   subsectors: Array<{
     name: string;
     count: number;
@@ -66,6 +77,24 @@ interface NewsPayload {
   items: NewsItem[];
   stats: { seen: number; rejected: number; kept: number; failedTopics: number };
   provenance: Provenance;
+}
+
+const LEGAL =
+  /\s+(plc|inc|ltd|limited|holdings?|corporation|corp|company|co|sa|se|nv|ag|spa|group|technologies|technology|solutions|systems|international)\b\.?/gi;
+
+function nameKey(name: string): string {
+  return name.toLowerCase().replace(LEGAL, "").replace(/[^a-z0-9]/g, "");
+}
+
+/** A workbook row and a filed row are the same company when one name contains the other. */
+function isHeld(held: Set<string>, key: string): boolean {
+  if (key.length < 3) return false;
+  if (held.has(key)) return true;
+  for (const k of held) {
+    if (k.length < 3) continue;
+    if (k.startsWith(key) || key.startsWith(k)) return true;
+  }
+  return false;
 }
 
 function bn(v: number): string {
@@ -88,6 +117,8 @@ export function SectorSignal() {
   const [region, setRegion] = useState("All");
   const [sortKey, setSortKey] = useState<SortKey>("revenue");
   const [openTheme, setOpenTheme] = useState<string | null>(null);
+  const [segment, setSegment] = useState("IT services");
+  const [withPeers, setWithPeers] = useState(true);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -164,6 +195,49 @@ export function SectorSignal() {
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => b.value - a.value);
   }, [selected]);
+
+  const segments = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of data?.rows ?? []) map.set(r.subsector, (map.get(r.subsector) ?? 0) + 1);
+    if (withPeers) {
+      for (const p of data?.peers ?? []) map.set(p.segment, (map.get(p.segment) ?? 0) + 1);
+    }
+    return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  }, [data, withPeers]);
+
+  const stakes = useMemo(() => {
+    const filed = (data?.rows ?? [])
+      .filter((r) => r.subsector === segment && r.revenue !== null)
+      .map((r) => ({
+        name: r.name,
+        revenue: r.revenue as number,
+        period: r.period ?? "Not stated",
+        home: r.region,
+        origin: r.source === "sec" ? "Filed with the SEC" : "Published by the company",
+      }));
+
+    const held = new Set(
+      (data?.rows ?? [])
+        .filter((r) => r.subsector === segment && r.revenue !== null)
+        .flatMap((r) => [nameKey(r.name), nameKey(r.short)]),
+    );
+    const extra = !withPeers
+      ? []
+      : (data?.peers ?? [])
+          .filter((p) => p.segment === segment && p.revenue !== null)
+          .filter((p) => !isHeld(held, nameKey(p.name)))
+          .map((p) => ({
+            name: p.name,
+            revenue: p.revenue as number,
+            period: p.period,
+            home: p.headquarters,
+            origin: "Peer workbook",
+          }));
+
+    return [...filed, ...extra].sort((a, b) => b.revenue - a.revenue);
+  }, [data, segment, withPeers]);
+
+  const stakeTotal = stakes.reduce((s, x) => s + x.revenue, 0);
 
   const median = (xs: number[]) => {
     if (!xs.length) return null;
@@ -347,6 +421,110 @@ export function SectorSignal() {
             </div>
 
             <Panel
+              title="Share by company"
+              hint="One segment at a time, every name in it, sized by revenue. Select a segment."
+              actions={<Prov p={data.provenance} />}
+            >
+              <div style={{ display: "grid", gap: 18 }}>
+                <div className="filter-bar" style={{ padding: 0, border: 0, gap: 8 }}>
+                  <div className="filter-row">
+                    <span className="t-label filter-row-label">Segment</span>
+                    <div className="filter-row-chips">
+                      {segments.map((s) => (
+                        <button
+                          key={s.name}
+                          type="button"
+                          className="chip"
+                          data-active={segment === s.name}
+                          aria-pressed={segment === s.name}
+                          onClick={() => setSegment(s.name)}
+                        >
+                          {s.name}
+                          <span className="chip-count">{s.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="filter-row">
+                    <span className="t-label filter-row-label">Set</span>
+                    <div className="filter-row-chips">
+                      <button
+                        type="button"
+                        className="chip"
+                        data-active={!withPeers}
+                        aria-pressed={!withPeers}
+                        onClick={() => setWithPeers(false)}
+                      >
+                        Filed record only
+                      </button>
+                      <button
+                        type="button"
+                        className="chip"
+                        data-active={withPeers}
+                        aria-pressed={withPeers}
+                        onClick={() => setWithPeers(true)}
+                      >
+                        With the peer workbook
+                        <span className="chip-count">{data.peers.length}</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{ display: "grid", gap: 24, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}
+                >
+                  <Donut
+                    slices={stakes.map((s) => ({ label: s.name, value: s.revenue }))}
+                    total={stakeTotal}
+                    totalLabel={`${segment} revenue`}
+                    format={(v) => bn(v)}
+                    caption={`${stakes.length} companies in ${segment}. Each company is on its own last reported period, named in the table, so this is the shape of the segment rather than a market total for one year.`}
+                  />
+
+                  <div className="table-scroll">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Company</th>
+                          <th className="num">Revenue</th>
+                          <th className="num">Share</th>
+                          <th>Period</th>
+                          <th>Read from</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stakes.map((s, i) => (
+                          <tr key={`${s.name}-${i}`}>
+                            <td className="tnum">{i + 1}</td>
+                            <td>
+                              {s.name}
+                              <span className="cmp-period"> {s.home}</span>
+                            </td>
+                            <td className="num tnum">{bn(s.revenue)}</td>
+                            <td className="num tnum">
+                              {stakeTotal > 0 ? `${((s.revenue / stakeTotal) * 100).toFixed(1)}%` : <NotSet />}
+                            </td>
+                            <td className="t-small">{s.period}</td>
+                            <td className="t-small">{s.origin}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <p className="t-small" style={{ margin: 0, fontSize: 12 }}>
+                  Companies in the coverage universe carry figures computed on this request from what they
+                  filed or published. The rest come from the peer workbook taken{" "}
+                  {data.peersTakenAt.slice(0, 10)}, on the period each row names. A company appearing in both
+                  is counted once, on its filed figure.
+                </p>
+              </div>
+            </Panel>
+
+            <Panel
               title="Theme exposure, on fundamentals"
               hint="Median growth and margin across the companies carrying each theme. Select a theme for its constituents and current coverage."
               actions={<Prov p={data.provenance} />}
@@ -477,12 +655,12 @@ export function SectorSignal() {
                         <td className="num">
                           {r.revenueGrowthPct !== null ? <Delta value={r.revenueGrowthPct} /> : <NotSet />}
                         </td>
-                        <td className="num">{r.grossMargin !== null ? `${r.grossMargin.toFixed(1)}%` : "n/a"}</td>
-                        <td className="num">{r.operatingMargin !== null ? `${r.operatingMargin.toFixed(1)}%` : "n/a"}</td>
-                        <td className="num">{r.netMargin !== null ? `${r.netMargin.toFixed(1)}%` : "n/a"}</td>
-                        <td className="num">{r.rndIntensity !== null ? `${r.rndIntensity.toFixed(1)}%` : "n/a"}</td>
+                        <td className="num">{r.grossMargin !== null ? `${r.grossMargin.toFixed(1)}%` : <NotSet />}</td>
+                        <td className="num">{r.operatingMargin !== null ? `${r.operatingMargin.toFixed(1)}%` : <NotSet />}</td>
+                        <td className="num">{r.netMargin !== null ? `${r.netMargin.toFixed(1)}%` : <NotSet />}</td>
+                        <td className="num">{r.rndIntensity !== null ? `${r.rndIntensity.toFixed(1)}%` : <NotSet />}</td>
                         <td className="num">
-                          <span className="t-small" style={{ fontSize: 11 }}>{r.period ?? "n/a"}</span>
+                          <span className="t-small" style={{ fontSize: 11 }}>{r.period ?? "Not stated"}</span>
                         </td>
                       </tr>
                     ))}

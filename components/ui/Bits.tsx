@@ -101,7 +101,7 @@ export function Prov({ p }: { p: Provenance }) {
 }
 
 export function NotSet() {
-  return <span style={{ color: "var(--text-muted)" }}>Not set</span>;
+  return <span style={{ color: "var(--text-muted)" }}>Not reported</span>;
 }
 
 export function Delta({

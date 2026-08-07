@@ -3,10 +3,18 @@ import { scrapeIr } from "@/lib/research/ir-scrape";
 import { buildLedgerFromIr } from "@/lib/research/ir-facts";
 import { getFxTable } from "@/lib/feeds/fx";
 import { snapshotLedger } from "@/lib/research/ir-snapshot-ledger";
+import { withPublished } from "@/lib/research/published-ledger";
 import { resolveCik } from "@/lib/feeds/sec";
 import type { Company } from "@/lib/data/universe";
 import type { MetricKey } from "@/lib/brain/intent";
 import type { Provenance } from "@/lib/core/types";
+
+/** Names that close their financial year in March rather than December. */
+const MARCH_YEAR_END = new Set(["EXPN.L"]);
+
+export function fiscalYearEndMonth(company: Pick<Company, "region" | "symbol">): number {
+  return company.region === "India" || MARCH_YEAR_END.has(company.symbol) ? 3 : 12;
+}
 
 export interface CompanyLedger {
   ledger: FactLedger | null;
@@ -28,23 +36,21 @@ export async function ledgerFor(company: Company): Promise<CompanyLedger> {
     return { ledger, provenance: ledger.provenance, unavailable: null };
   }
 
-  const scraped = await scrapeIr(company.symbol, 3).catch(() => null);
+  const scraped = await scrapeIr(company.symbol, 4).catch(() => null);
+  const fx = await getFxTable().catch(() => null);
+
+  let built: FactLedger | null = null;
 
   if (scraped && scraped.metrics.length > 0) {
-    const fx = await getFxTable().catch(() => null);
-    const bridged = buildLedgerFromIr(scraped, fx, company.currency);
-    if (bridged) {
-      return {
-        ledger: bridged.ledger,
-        provenance: bridged.ledger.provenance,
-        unavailable: null,
-      };
-    }
+    built = buildLedgerFromIr(scraped, fx, company.currency, fiscalYearEndMonth(company))?.ledger ?? null;
   }
 
-  const harvested = snapshotLedger(company.symbol);
-  if (harvested) {
-    return { ledger: harvested, provenance: harvested.provenance, unavailable: null };
+  if (!built) built = snapshotLedger(company.symbol);
+
+  const filled = withPublished(built, company.symbol, company.name, fx);
+
+  if (filled) {
+    return { ledger: filled, provenance: filled.provenance, unavailable: null };
   }
 
   return {

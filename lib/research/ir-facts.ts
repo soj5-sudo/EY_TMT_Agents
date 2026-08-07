@@ -61,10 +61,20 @@ export function parsePeriod(label: string): ParsedPeriod | null {
   return null;
 }
 
-function periodEnd(p: ParsedPeriod): string {
-  const month = p.quarter === null ? 12 : p.quarter * 3;
+/**
+ * Where a period ends on the calendar.
+ *
+ * An Indian company's FY26 ran to March 2026 and its first quarter of FY27 to
+ * June 2026, so a year label alone does not place a period in time. The month
+ * the financial year closes does.
+ */
+function periodEnd(p: ParsedPeriod, fyEndMonth: number): string {
+  const quarter = p.quarter ?? 4;
+  const absolute = p.year * 12 + fyEndMonth - (4 - quarter) * 3;
+  const year = Math.floor((absolute - 1) / 12);
+  const month = absolute - year * 12;
   const day = [4, 6, 9, 11].includes(month) ? 30 : month === 2 ? 28 : 31;
-  return `${p.year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 const LABEL_MAP: Array<[FactKey, RegExp[]]> = [
@@ -193,6 +203,7 @@ export function buildLedgerFromIr(
   scrape: IrScrapeResult,
   fx: FxTable | null,
   declaredCurrency: string | null,
+  fyEndMonth = 12,
 ): IrLedgerResult | null {
   const series: Partial<Record<FactKey, FactSeries>> = {};
   const mapped: FactKey[] = [];
@@ -202,26 +213,36 @@ export function buildLedgerFromIr(
 
   const claimed = new Set<FactKey>();
 
-  const currencyVotes = new Map<string, { count: number; hasRevenue: boolean }>();
+  const currencyVotes = new Map<string, { count: number; hasRevenue: boolean; newest: number }>();
   for (const m of scrape.metrics) {
     const k = matchKey(m.label);
     if (!k || k === "employees" || RATIO_ROW.test(m.label)) continue;
     const cur = m.unit?.currency ?? declaredCurrency;
     if (!cur) continue;
-    const held = currencyVotes.get(cur) ?? { count: 0, hasRevenue: false };
+    const held = currencyVotes.get(cur) ?? { count: 0, hasRevenue: false, newest: 0 };
     held.count += 1;
-    if (k === "revenue") held.hasRevenue = true;
+    if (k === "revenue") {
+      held.hasRevenue = true;
+      for (const v of m.values) {
+        const p = parsePeriod(v.period);
+        if (p && p.key > held.newest) held.newest = p.key;
+      }
+    }
     currencyVotes.set(cur, held);
   }
 
+  // A company that publishes in two currencies is read in the one its current
+  // results are stated in, not the one an old filing happened to use.
   const chosenCurrency =
     [...currencyVotes.entries()]
       .sort((a, b) => {
         if (a[1].hasRevenue !== b[1].hasRevenue) return a[1].hasRevenue ? -1 : 1;
+        if (a[1].newest !== b[1].newest) return b[1].newest - a[1].newest;
+        if (a[1].count !== b[1].count) return b[1].count - a[1].count;
         const aUsd = a[0] === "USD";
         const bUsd = b[0] === "USD";
         if (aUsd !== bUsd) return aUsd ? -1 : 1;
-        return b[1].count - a[1].count;
+        return 0;
       })
       .at(0)?.[0] ?? null;
 
@@ -283,9 +304,21 @@ export function buildLedgerFromIr(
 
     points.sort((a, b) => a.p.key - b.p.key);
 
+    // A quarter never comes in at a fortieth of another period in the same
+    // file. When it does, a column has slipped, and the figure is dropped
+    // rather than shown.
+    if (!isCount && points.length >= 2) {
+      const peak = Math.max(...points.map((x) => Math.abs(x.v)));
+      const kept = points.filter((x) => Math.abs(x.v) * 40 >= peak);
+      if (kept.length > 0 && kept.length < points.length) {
+        points.length = 0;
+        points.push(...kept);
+      }
+    }
+
     const toValue = (x: (typeof points)[number]): FactValue => ({
       start: null,
-      end: periodEnd(x.p),
+      end: periodEnd(x.p, fyEndMonth),
       value: x.v,
       form: "Published results file",
       filed: scrape.provenance.retrievedAt.slice(0, 10),
@@ -309,7 +342,7 @@ export function buildLedgerFromIr(
           const ordered = [...qs].sort((a, b) => a.end.localeCompare(b.end));
           return {
             start: null,
-            end: `${y}-12-31`,
+            end: periodEnd({ year: y, quarter: null, key: 0, label: `FY${y}` }, fyEndMonth),
             value: isStock
               ? ordered[ordered.length - 1].value
               : ordered.reduce((sum, x) => sum + x.value, 0),
@@ -331,7 +364,7 @@ export function buildLedgerFromIr(
     series[key] = {
       key,
       label: CONCEPT_LABEL[key] ?? key,
-      tag: `${metric.label}, published results file`,
+      tag: `${metric.label}, ${metric.derivedFrom ?? "published results file"}`,
       unit: key === "employees" ? "count" : "USD",
       annual,
       quarterly: quarterlyPts.slice(-16),

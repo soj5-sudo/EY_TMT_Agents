@@ -27,14 +27,40 @@ INDEXES: dict[str, list[str]] = {
         "https://www.experianplc.com/investors/results-reports-presentations/results-presentations"
     ],
     "ATE.PA": ["https://www.alten.com/investors/"],
-    "ZENSARTECH.NS": ["https://www.zensar.com/investors"],
-    "BSOFT.NS": ["https://www.birlasoft.com/company/investors/policies-reports-filings"],
-    "MASTEK.NS": ["https://www.mastek.com/investors/financial-information/"],
-    "DATAMATICS.NS": ["https://www.datamatics.com/about-us/investor-relations/financials"],
-    "RSYSTEMS.NS": ["https://www.rsystems.com/investors-info/"],
-    "HAPPSTMNDS.NS": ["https://www.happiestminds.com/investors/"],
-    "SAKSOFT.NS": ["https://www.saksoft.com/investor/financials/"],
-    "KELLTONTEC.NS": ["https://www.kellton.com/financial-results"],
+    "ZENSARTECH.NS": [
+        "https://www.zensar.com/investors",
+        "https://www.zensar.com/about/investors/investors-relation",
+    ],
+    "BSOFT.NS": [
+        "https://www.birlasoft.com/company/investors/financial-reports",
+        "https://www.birlasoft.com/company/investors",
+        "https://www.birlasoft.com/company/investors/policies-reports-filings",
+    ],
+    "MASTEK.NS": [
+        "https://www.mastek.com/investors/financial-information/",
+        "https://www.mastek.com/investors/quarterly-results/",
+    ],
+    "DATAMATICS.NS": [
+        "https://www.datamatics.com/about-us/investor-relations/financials",
+        "https://www.datamatics.com/investors/financial-results",
+        "https://www.datamatics.com/about-us/investor-relations",
+    ],
+    "RSYSTEMS.NS": [
+        "https://www.rsystems.com/investors-info/",
+        "https://www.rsystems.com/investors/financial-results/",
+    ],
+    "HAPPSTMNDS.NS": [
+        "https://www.happiestminds.com/investors/",
+        "https://www.happiestminds.com/investors/financial-results/",
+    ],
+    "SAKSOFT.NS": [
+        "https://www.saksoft.com/investor/financials/",
+        "https://www.saksoft.com/investor/",
+    ],
+    "KELLTONTEC.NS": [
+        "https://www.kellton.com/financial-results",
+        "https://www.kellton.com/investors",
+    ],
     "GLOB": ["https://investors.globant.com/quarterly-earnings"],
 }
 
@@ -43,12 +69,13 @@ FILE_RE = re.compile(r"\.(xlsx?|pdf)(?:$|\?)", re.I)
 NOISE_RE = re.compile(
     r"modern[-_ ]?slavery|policy|policies|code[-_ ]?of|charter|notice|intimation|"
     r"postal[-_ ]?ballot|scrutin|newspaper|advertis|agm|egm|dividend[-_ ]?payment|"
-    r"transfer|dematerialis|unclaimed|nomination|whistle|prevention|terms[-_ ]?of",
+    r"transfer|dematerialis|unclaimed|nomination|whistle|prevention|terms[-_ ]?of|"
+    r"subsidiar",
     re.I,
 )
 
 def score(url: str) -> int:
-        name = url.rsplit("/", 1)[-1].lower()
+    name = url.rsplit("/", 1)[-1].lower()
     s = 0
     if re.search(r"\.xlsx?($|\?)", name):
         s += 60
@@ -60,11 +87,13 @@ def score(url: str) -> int:
         s += 25
     if re.search(r"press[-_ ]?release|investor[-_ ]?(release|presentation|update)", name):
         s += 20
+    if re.search(r"transcript|earnings[-_ ]?call", name):
+        s += 15
     if re.search(r"q[1-4]|fy[-_ ]?\d{2}", name):
         s += 25
     year = re.search(r"(?:fy|20)(\d{2})\b", name)
     if year:
-        s += min(30, int(year.group(1)))
+        s += min(30, int(year.group(1))) * 2
     if NOISE_RE.search(name):
         s -= 90
     return s
@@ -83,7 +112,7 @@ def collect(page, base: str) -> set[str]:
     return out
 
 def discover(url: str) -> tuple[set[str], str]:
-        try:
+    try:
         plain = Fetcher.get(url, stealthy_headers=True, timeout=30)
         files = collect(plain, url)
         if any(score(f) > 0 for f in files):
@@ -115,7 +144,7 @@ def main() -> int:
                 key=lambda f: -score(f),
             )
             if ranked:
-                best = ranked[:12]
+                best = ranked[:24]
                 used = url
                 mode = how
                 break

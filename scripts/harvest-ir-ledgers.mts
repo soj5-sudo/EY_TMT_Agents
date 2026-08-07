@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { IR_INDEXES, scrapeIr } from "@/lib/research/ir-scrape";
 import { buildLedgerFromIr } from "@/lib/research/ir-facts";
+import { fiscalYearEndMonth } from "@/lib/brain/ledger";
 import { getFxTable } from "@/lib/feeds/fx";
 import { UNIVERSE } from "@/lib/data/universe";
 import type { FactKey } from "@/lib/research/facts";
@@ -43,13 +44,13 @@ for (const index of IR_INDEXES) {
   }
 
   try {
-    const scraped = await scrapeIr(index.symbol, 3);
+    const scraped = await scrapeIr(index.symbol, 8);
     if (!scraped || scraped.metrics.length === 0) {
       console.log(`${index.symbol.padEnd(15)} no metric rows could be read`);
       continue;
     }
 
-    const bridged = buildLedgerFromIr(scraped, fx, company.currency);
+    const bridged = buildLedgerFromIr(scraped, fx, company.currency, fiscalYearEndMonth(company));
     if (!bridged) {
       console.log(
         `${index.symbol.padEnd(15)} ${scraped.metrics.length} rows read, none mapped onto a measure`,

@@ -4,7 +4,7 @@ import { getIrHistory } from "@/lib/feeds/ir";
 import type { FactKey } from "@/lib/research/facts";
 import { ledgerFor } from "@/lib/brain/ledger";
 import { UNIVERSE, type Theme } from "@/lib/data/universe";
-import { cached } from "@/lib/core/cache";
+import { cached, cacheGet } from "@/lib/core/cache";
 
 const TTL_MS = 6 * 60 * 60 * 1000;
 const SPACING_MS = 110;
@@ -176,6 +176,20 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
   };
 }
 
+
+/**
+ * The same rows, but only if they are already computed.
+ *
+ * Reading seventy companies takes minutes on a cold instance. A panel that
+ * only needs the figures to enrich what it already has asks this way, gets
+ * what is there, and starts the computation for the request after it.
+ */
+export function sectorRowsIfWarm(): { rows: SectorRow[]; storedAt: number } | null {
+  const hit = cacheGet<SectorRow[]>("sector:fundamentals");
+  if (hit) return { rows: hit.value, storedAt: hit.storedAt };
+  void sectorRows().catch(() => {});
+  return null;
+}
 
 /**
  * Every company in the universe, on its own reported figures. One computation

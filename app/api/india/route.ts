@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sectorRows } from "@/lib/brain/sector";
+import { sectorRowsIfWarm } from "@/lib/brain/sector";
 import { ledgerFor } from "@/lib/brain/ledger";
 import { UNIVERSE } from "@/lib/data/universe";
 import { PEER_UNIVERSE } from "@/lib/data/peer-universe";
@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 const TTL_MS = 6 * 60 * 60 * 1000;
+/** A reading taken before the filings were read is held only briefly. */
+const COLD_TTL_MS = 90 * 1000;
 
 type Origin = "filing" | "tracker" | "workbook";
 
@@ -38,7 +40,11 @@ export interface IndiaState {
 export async function GET(request: Request) {
   const vertical = new URL(request.url).searchParams.get("vertical") ?? "all";
 
-  const res = await cached(`india:map:${vertical}`, TTL_MS, async () => {
+  // Where a company is registered, not where its shares happen to trade.
+  // Infosys and Wipro file in New York and are headquartered in Bengaluru.
+  const sector = sectorRowsIfWarm();
+
+  const res = await cached(`india:map:${vertical}`, sector ? TTL_MS : COLD_TTL_MS, async () => {
     const rows = new Map<string, IndiaCompany>();
 
     for (const p of PEER_UNIVERSE) {
@@ -79,12 +85,9 @@ export async function GET(request: Request) {
       });
     }
 
-    const sector = await sectorRows();
-    // Where a company is registered, not where its shares happen to trade.
-    // Infosys and Wipro file in New York and are headquartered in Bengaluru.
     const indian = new Map(UNIVERSE.map((c) => [c.symbol, c]));
 
-    for (const r of sector.rows) {
+    for (const r of sector?.rows ?? []) {
       if (r.revenue === null) continue;
       const loc = locationFor(r.short) ?? locationFor(r.name);
       if (!loc) continue;
@@ -151,6 +154,7 @@ export async function GET(request: Request) {
       companies,
       states,
       filed: companies.filter((c) => c.origin === "filing").length,
+      warm: sector !== null,
     };
   });
 
@@ -178,7 +182,8 @@ export async function GET(request: Request) {
         note:
           `${v.companies.length} Indian companies across ${v.states.length} states. ` +
           `${v.filed} carry figures computed from their own filed or published documents on this request. ` +
-          `The rest carry the last reported figure from the quarterly tracker or the peer workbook, with the period shown on the row.`,
+          `The rest carry the last reported figure from the quarterly tracker or the peer workbook, with the period shown on the row.` +
+          (v.warm ? "" : " The filings are being read now, and will be on the next load of this panel."),
       } satisfies Provenance,
       generatedAt: nowIso(),
     },

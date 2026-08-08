@@ -2355,3 +2355,9 @@ button.source-tag {
   font-size: 11px;
   letter-spacing: 0.02em;
 }
+.trk-said-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+}

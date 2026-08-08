@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Donut } from "@/components/charts/Donut";
+import { callFor } from "@/lib/data/ir-calls";
 import { QuarterBars } from "@/components/charts/QuarterBars";
 import { Scatter } from "@/components/charts/Scatter";
 import { SectorHistory } from "@/components/dashboards/SectorHistory";
@@ -156,6 +157,13 @@ function FilterRow({ label, children }: { label: string; children: React.ReactNo
       <div className="filter-row-chips">{children}</div>
     </div>
   );
+}
+
+/** An ISO date as a reader would say it. */
+function spoken(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
 export function SectorTracker({
@@ -490,9 +498,8 @@ export function SectorTracker({
             </Panel>
 
             <Panel
-              title="What management said"
-              hint={`The stated reason for the ${spec.label.toLowerCase()} movement, company by company, as the tracker recorded it. This is the part of a quarter that no filing publishes in a readable form, so it is quoted rather than summarised.`}
-              actions={<Prov p={data.provenance} />}
+              title="What management said on the call"
+              hint="Taken from the latest earnings call each company published on its own investor site, in the speaker's words. The transcript is linked on every entry."
               flush
             >
               {companies.length === 0 ? (
@@ -503,6 +510,7 @@ export function SectorTracker({
               ) : (
                 <ul className="trk-said">
                   {companies.map((c) => {
+                    const call = callFor(c.name);
                     const m = c.measures[spec.key];
                     const reason = stated(m?.reason);
                     const source = stated(m?.source)?.replace(/^[•\s]+/, "");
@@ -520,17 +528,43 @@ export function SectorTracker({
                           </span>
                         </div>
 
-                        <p className="trk-reason">
-                          {reason ?? (
-                            <span className="t-small">
-                              No reason is recorded against this measure for the quarter.
-                            </span>
-                          )}
-                        </p>
-
-                        <p className="t-small trk-said-src">
-                          {source ? `Source: ${source}` : "Source not stated"}
-                        </p>
+                        {call ? (
+                          <>
+                            {call.quotes.map((q, i) => (
+                              <blockquote key={i} className="trk-quote">
+                                <p className="trk-quote-text">{q.text}</p>
+                                <p className="t-small trk-quote-by">
+                                  {q.speaker}
+                                  {q.role ? `, ${q.role}` : ""} on {q.topic}
+                                </p>
+                              </blockquote>
+                            ))}
+                            <p className="t-small trk-said-src">
+                              {call.quarter} earnings call
+                              {call.callDate ? `, ${spoken(call.callDate)}` : ""}.{" "}
+                              <a href={call.transcriptUrl} target="_blank" rel="noreferrer noopener">
+                                Read the transcript
+                              </a>
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="t-small trk-said-note">
+                              No transcript could be read for this company. What follows is the
+                              quarterly tracker&apos;s recorded note, not the call.
+                            </p>
+                            <p className="trk-reason">
+                              {reason ?? (
+                                <span className="t-small">
+                                  Nothing is recorded against this measure for the quarter either.
+                                </span>
+                              )}
+                            </p>
+                            <p className="t-small trk-said-src">
+                              {source ? `Recorded from ${source}` : "No source is stated"}
+                            </p>
+                          </>
+                        )}
                       </li>
                     );
                   })}

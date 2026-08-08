@@ -19,7 +19,10 @@ INDEXES: dict[str, list[str]] = {
     "TECHM.NS": ["https://www.techmahindra.com/investors/quarterly-earnings/"],
     "BHARTIARTL.NS": ["https://www.airtel.in/about-bharti/equity/results"],
     "RELIANCE.NS": ["https://www.ril.com/InvestorRelations/FinancialReporting.aspx"],
-    "LTIM.NS": ["https://www.ltimindtree.com/investors/financial-results/"],
+    "LTIM.NS": [
+        "https://www.ltm.com/investors/financial-results",
+        "https://www.ltimindtree.com/investors/financial-results/",
+    ],
     "COFORGE.NS": ["https://investors.coforge.com/quarter-reports"],
     "PERSISTENT.NS": ["https://www.persistent.com/investors/quarterly-results/"],
     "CAP.PA": ["https://investors.capgemini.com/en/financial-results/"],

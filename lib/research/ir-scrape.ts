@@ -68,8 +68,8 @@ export const IR_INDEXES: IrIndex[] = [
     symbol: "LTIM.NS",
     name: "LTIMindtree",
     urls: [
+      "https://www.ltm.com/investors/financial-results",
       "https://www.ltimindtree.com/investors/financial-results/",
-      "https://www.ltimindtree.com/investors/",
     ],
   },
   {

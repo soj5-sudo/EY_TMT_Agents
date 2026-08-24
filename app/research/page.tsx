@@ -6,8 +6,6 @@ import { Delta, NotSet, PageHeader, Panel, Prov, Stack, StatBlock, StatRow } fro
 import { SourceList } from "@/components/ui/SourceList";
 import type { AgentFinding, NewsItem, Provenance, Quote } from "@/lib/core/types";
 import { useDocuments } from "@/lib/client/documents";
-import { Benchmark } from "@/components/dashboards/Benchmark";
-import { Compare } from "@/components/dashboards/Compare";
 import { apiFetch } from "@/lib/client/api";
 
 interface FinancialSeries {
@@ -132,7 +130,7 @@ export default function ResearchPage() {
   return (
     <div className="shell">
       <PageHeader
-        index="04"
+        index="05"
         title="Company research"
         lede="Name any company. The agent resolves it against the SEC register, pulls its filing history and tagged financials, checks its market position, and reads verified coverage. Private documents can be added alongside the public record."
       />
@@ -190,10 +188,6 @@ export default function ResearchPage() {
             </div>
           </form>
         </Panel>
-
-        <Benchmark />
-
-        <Compare />
 
         <Panel
           title="Private records"

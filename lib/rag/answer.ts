@@ -1,6 +1,7 @@
 import { Bm25Index, type RagDoc, type ScoredDoc } from "@/lib/rag/bm25";
 import { staticCorpus, newsDocs, quoteDocs } from "@/lib/rag/corpus";
 import { computeAnswer } from "@/lib/brain/engine";
+import { providerLabel, rephrase } from "@/lib/ai/provider";
 import { parseQuestion } from "@/lib/brain/intent";
 import type { NewsItem, Provenance, Quote } from "@/lib/core/types";
 
@@ -25,6 +26,10 @@ export interface Answer {
 }
 
 const ENGINE_LABEL = "In-house analytical engine";
+
+const REPHRASE =
+  "Rewrite the following analyst note so it reads more clearly. Keep every number, name, date and " +
+  "citation marker exactly as written. Add nothing that is not already there. Return the note only.";
 
 export interface LiveContext {
   news?: NewsItem[];
@@ -157,7 +162,7 @@ export async function answerQuestion(index: Bm25Index, question: string): Promis
 
   if (computed && computed.method === "computed") {
     return {
-      text: computed.text,
+      text: await rephrase(REPHRASE, computed.text),
       citations: computed.sources.map((s: Provenance, i) => ({
         n: i + 1,
         title: s.source,
@@ -170,7 +175,7 @@ export async function answerQuestion(index: Bm25Index, question: string): Promis
       confidence: "high",
       usedUntrusted: false,
       injectionNotice: null,
-      providerLabel: ENGINE_LABEL,
+      providerLabel: `${ENGINE_LABEL}. Wording: ${providerLabel()}`,
       table: computed.table,
     };
   }

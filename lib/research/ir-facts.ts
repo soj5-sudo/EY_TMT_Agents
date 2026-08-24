@@ -61,13 +61,6 @@ export function parsePeriod(label: string): ParsedPeriod | null {
   return null;
 }
 
-/**
- * Where a period ends on the calendar.
- *
- * An Indian company's FY26 ran to March 2026 and its first quarter of FY27 to
- * June 2026, so a year label alone does not place a period in time. The month
- * the financial year closes does.
- */
 function periodEnd(p: ParsedPeriod, fyEndMonth: number): string {
   const quarter = p.quarter ?? 4;
   const absolute = p.year * 12 + fyEndMonth - (4 - quarter) * 3;
@@ -231,8 +224,6 @@ export function buildLedgerFromIr(
     currencyVotes.set(cur, held);
   }
 
-  // A company that publishes in two currencies is read in the one its current
-  // results are stated in, not the one an old filing happened to use.
   const chosenCurrency =
     [...currencyVotes.entries()]
       .sort((a, b) => {
@@ -304,9 +295,6 @@ export function buildLedgerFromIr(
 
     points.sort((a, b) => a.p.key - b.p.key);
 
-    // A quarter never comes in at a fortieth of another period in the same
-    // file. When it does, a column has slipped, and the figure is dropped
-    // rather than shown.
     if (!isCount && points.length >= 2) {
       const peak = Math.max(...points.map((x) => Math.abs(x.v)));
       const kept = points.filter((x) => Math.abs(x.v) * 40 >= peak);

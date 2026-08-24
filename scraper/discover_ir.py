@@ -15,6 +15,11 @@ OUT = REPO / "lib" / "data" / "ir-discovered.ts"
 INDEXES: dict[str, list[str]] = {
     "TCS.NS": ["https://www.tcs.com/investor-relations/financial-statements"],
     "HCLTECH.NS": ["https://www.hcltech.com/investors/quarterly-results"],
+    "INFY": [
+        "https://www.infosys.com/investors/reports-filings/quarterly-results.html",
+        "https://www.infosys.com/investors/reports-filings/quarterly-results/2026-2027/q1.html",
+    ],
+    "WIT": ["https://www.wipro.com/investors/quarterly-results/"],
     "MPHASIS.NS": ["https://www.mphasis.com/home/corporate/investors.html"],
     "TECHM.NS": ["https://www.techmahindra.com/investors/quarterly-earnings/"],
     "BHARTIARTL.NS": ["https://www.airtel.in/about-bharti/equity/results"],

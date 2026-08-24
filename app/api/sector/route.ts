@@ -3,7 +3,6 @@ import { sectorRows } from "@/lib/brain/sector";
 import { THEME_LABELS, type Theme } from "@/lib/data/universe";
 import { PEER_TAKEN_AT, PEER_UNIVERSE } from "@/lib/data/peer-universe";
 
-/** The workbook names its verticals its own way; two of them are ours. */
 const PEER_SEGMENT: Record<string, string> = {
   "IT services": "IT services",
   "Enterprise software": "Software and platforms",

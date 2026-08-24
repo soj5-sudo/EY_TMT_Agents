@@ -2361,3 +2361,30 @@ button.source-tag {
   letter-spacing: 0.02em;
   color: var(--text-muted);
 }
+
+/* A measure reads as a figure first and a movement second, so the value
+   carries the weight and the change sits under it. */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1px;
+  background: var(--ey-grey-pale);
+  border: 1px solid var(--ey-grey-pale);
+}
+.kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  background: var(--surface, #fff);
+}
+.kpi-card-label { font-size: 10px; }
+.kpi-card-value {
+  font-size: 26px;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  color: var(--ey-charcoal);
+}
+.kpi-card-move { font-size: 12px; }
+.kpi-card-how { font-size: 11px; line-height: 1.45; margin-top: 2px; }
+@media (max-width: 640px) { .kpi-card-value { font-size: 22px; } }

@@ -159,7 +159,6 @@ function FilterRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-/** An ISO date as a reader would say it. */
 function spoken(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
@@ -309,7 +308,7 @@ export function SectorTracker({
   return (
     <div className="shell trk-shell">
       <PageHeader
-        index="06"
+        index="03"
         title="IT services tracker"
         lede="The quarterly sector record for the listed Indian IT services names: what each company reported for the quarter, what management gave as the reason it moved, and which document that reason came from. The figures are a reading taken on a stated date rather than a live computation, and every line keeps the source it was read from."
         meta={data && <Prov p={data.provenance} />}

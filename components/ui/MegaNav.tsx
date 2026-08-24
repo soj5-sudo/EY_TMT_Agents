@@ -23,22 +23,22 @@ const DESTINATIONS: Destination[] = [
   },
   {
     index: "02",
-    href: "/dashboard/financials",
-    title: "Quarterly P&L",
-    summary: "Reported results",
+    href: "/dashboard/company",
+    title: "Company dashboard",
+    summary: "One company, end to end",
     detail:
-      "Consolidated income statement quarter by quarter, an income statement bridge, expense by nature, and the cash flow summary. Rupees or dollars.",
+      "Income statement, key measures, revenue and cost per employee, utilisation and attrition where published, transactions, developments, and what management said on the last call. US registrants from the register, Indian companies from their own filings and fact sheets.",
+  },
+  {
+    index: "04",
+    href: "/compare",
+    title: "Compare",
+    summary: "Two or three names side by side",
+    detail:
+      "The same measures across companies on the same arithmetic, with each on its own last reported period, and one company against a named cohort.",
   },
   {
     index: "03",
-    href: "/dashboard/kpi",
-    title: "KPI detail",
-    summary: "What sits under the headline",
-    detail:
-      "Revenue distribution by market and domain on four growth bases, client concentration, headcount, attrition, and derived unit economics.",
-  },
-  {
-    index: "06",
     href: "/dashboard/tracker",
     title: "IT services tracker",
     summary: "The quarterly sector record",
@@ -49,7 +49,7 @@ const DESTINATIONS: Destination[] = [
 
 const TOOLS: Destination[] = [
   {
-    index: "04",
+    index: "05",
     href: "/research",
     title: "Company research",
     summary: "Any company, on demand",
@@ -57,7 +57,7 @@ const TOOLS: Destination[] = [
       "Name a company. The agent pulls its filing history, reported financials, market position and verified coverage, and accepts private documents alongside.",
   },
   {
-    index: "05",
+    index: "06",
     href: "/agents",
     title: "Diligence OS",
     summary: "Forty seven agents, ten workstreams",

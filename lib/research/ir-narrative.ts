@@ -1,14 +1,5 @@
 import type { IrMetric, IrUnit } from "@/lib/research/ir-scrape";
 
-/**
- * Figures stated in a sentence rather than a table.
- *
- * Mid-cap results releases often carry no grid at all: the quarter is written
- * out in prose, one figure per bullet. This reads those bullets. A figure is
- * only taken when the sentence names the period, names the measure, and puts a
- * currency and a scale against the number, so nothing here rests on a guess.
- */
-
 interface Hit {
   label: string;
   period: string;
@@ -86,11 +77,6 @@ function nearestPeriod(periods: Array<{ at: number; label: string }>, at: number
   return best.label;
 }
 
-/**
- * A layout engine sometimes strands one or two letters at the end of a line,
- * so "net cash" arrives as "net c" then "ash". A stranded fragment is welded
- * back on; an ordinary wrap keeps its space.
- */
 function weld(lines: string[]): string {
   let out = "";
   for (let i = 0; i < lines.length; i++) {

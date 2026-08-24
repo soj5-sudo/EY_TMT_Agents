@@ -9,7 +9,6 @@ import type { Company } from "@/lib/data/universe";
 import type { MetricKey } from "@/lib/brain/intent";
 import type { Provenance } from "@/lib/core/types";
 
-/** Names that close their financial year in March rather than December. */
 const MARCH_YEAR_END = new Set(["EXPN.L"]);
 
 export function fiscalYearEndMonth(company: Pick<Company, "region" | "symbol">): number {
@@ -22,6 +21,29 @@ export interface CompanyLedger {
   unavailable: string | null;
 }
 
+function merge(base: FactLedger, extra: FactLedger, from: string): FactLedger {
+  const series = { ...base.series };
+  const added: string[] = [];
+
+  for (const [key, line] of Object.entries(extra.series)) {
+    if (!line || series[key as FactKey]) continue;
+    series[key as FactKey] = line;
+    added.push(key);
+  }
+
+  if (added.length === 0) return base;
+
+  return {
+    ...base,
+    conceptsResolved: base.conceptsResolved + added.length,
+    series,
+    provenance: {
+      ...base.provenance,
+      note: `${base.provenance.note} ${added.length} further measures read from ${from}: ${added.join(", ")}.`,
+    },
+  };
+}
+
 export async function ledgerFor(company: Company): Promise<CompanyLedger> {
   if (company.secFiler) {
     const sec = await resolveCik(company.symbol).catch(() => null);
@@ -32,7 +54,20 @@ export async function ledgerFor(company: Company): Promise<CompanyLedger> {
         unavailable: `${company.short} is not in the SEC register.`,
       };
     }
-    const ledger = await getFactLedger(sec.cik);
+
+    let ledger = await getFactLedger(sec.cik);
+
+    if (company.region === "India") {
+      const scraped = await scrapeIr(company.symbol, 4).catch(() => null);
+      if (scraped && scraped.metrics.length > 0) {
+        const fx = await getFxTable().catch(() => null);
+        const built = buildLedgerFromIr(scraped, fx, company.currency, fiscalYearEndMonth(company));
+        if (built) ledger = merge(ledger, built.ledger, "its own published results files");
+      }
+      const harvested = snapshotLedger(company.symbol);
+      if (harvested) ledger = merge(ledger, harvested, "the harvested copy of those files");
+    }
+
     return { ledger, provenance: ledger.provenance, unavailable: null };
   }
 

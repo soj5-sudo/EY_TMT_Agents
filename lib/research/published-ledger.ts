@@ -2,15 +2,6 @@ import { IR_PUBLISHED, IR_PUBLISHED_TAKEN, type PublishedQuarter } from "@/lib/d
 import type { FactKey, FactLedger, FactSeries, FactValue } from "@/lib/research/facts";
 import type { FxTable } from "@/lib/feeds/fx";
 
-/**
- * The latest published quarter, in US dollars.
- *
- * Each record was read from the company's own results release or transcript
- * and checked against that document a second time before it was written here.
- * It fills the measures a file reader could not lift, and holds the quarter it
- * names; every other period keeps whatever the reader found.
- */
-
 export function publishedFor(symbol: string): PublishedQuarter | null {
   return IR_PUBLISHED.find((p) => p.symbol === symbol) ?? null;
 }
@@ -100,7 +91,6 @@ function priorPoint(entry: PublishedQuarter, rate: number): FactValue | null {
   };
 }
 
-/** Adds the published quarter to a ledger, keeping the reader's other periods. */
 export function withPublished(
   ledger: FactLedger | null,
   symbol: string,
@@ -132,8 +122,6 @@ export function withPublished(
       label: entry.periodLabel,
     };
 
-    // The checked figure is the one for its own quarter. Anything the file
-    // reader lifted for other periods is kept around it.
     const prior = m.key === "revenue" ? priorPoint(entry, conv.rate) : null;
     const quarterly = [
       ...(held?.quarterly ?? []).filter((p) => p.end !== point.end && p.end !== prior?.end),

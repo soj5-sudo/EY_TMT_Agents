@@ -50,6 +50,8 @@ export interface CompanyDossier {
     latestOperatingMarginPct: number | null;
     rndIntensityPct: number | null;
     years: number;
+    latestPeriod: string | null;
+    latestPeriodType: "annual" | "quarterly" | null;
   };
   news: NewsItem[];
   irQuarters: IrQuarter[];
@@ -667,6 +669,8 @@ export async function research(
       latestOperatingMarginPct,
       rndIntensityPct,
       years,
+      latestPeriod: period,
+      latestPeriodType: revenue?.periodType ?? null,
     },
     news,
     irQuarters,

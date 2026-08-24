@@ -140,7 +140,7 @@ export default function OperatingSystemPage() {
   return (
     <div className="shell">
       <PageHeader
-        index="05"
+        index="06"
         title="Diligence operating system"
         lede={`${AGENTS.length} agents across ten workstreams. Each holds a defined role, declares the evidence it needs, and hands to the agent after it. An agent with evidence returns a finding. An agent without it returns the document request that would close the gap, because an open item is more useful than an invented answer.`}
       />

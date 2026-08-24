@@ -28,8 +28,8 @@ export function CompanyPicker({
     });
   }, [sector, query]);
 
-  const filers = filtered.filter((c) => c.secFiler);
-  const others = filtered.filter((c) => !c.secFiler);
+  const indian = filtered.filter((c) => c.region === "India");
+  const rest = filtered.filter((c) => c.region !== "India");
 
   return (
     <div className="picker">
@@ -62,16 +62,21 @@ export function CompanyPicker({
       </div>
 
       <div className="picker-list" role="listbox" aria-label="Companies">
-        {filers.map((c) => (
-          <Option key={c.symbol} company={c} active={value === c.symbol} onChange={onChange} />
-        ))}
-        {others.length > 0 && (
+        {indian.length > 0 && (
           <>
             <div className="picker-divider">
-              Listed outside the US. No SEC statements available.
+              India. Read from exchange filings, fact sheets and quarterly presentations.
             </div>
-            {others.map((c) => (
-              <Option key={c.symbol} company={c} active={value === c.symbol} onChange={onChange} disabled />
+            {indian.map((c) => (
+              <Option key={c.symbol} company={c} active={value === c.symbol} onChange={onChange} />
+            ))}
+          </>
+        )}
+        {rest.length > 0 && (
+          <>
+            {indian.length > 0 && <div className="picker-divider">Rest of the coverage universe</div>}
+            {rest.map((c) => (
+              <Option key={c.symbol} company={c} active={value === c.symbol} onChange={onChange} />
             ))}
           </>
         )}
@@ -89,23 +94,20 @@ function Option({
   company,
   active,
   onChange,
-  disabled = false,
 }: {
   company: Company;
   active: boolean;
   onChange: (symbol: string) => void;
-  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       className="picker-item"
       data-active={active}
-      disabled={disabled}
       onClick={() => onChange(company.symbol)}
       role="option"
       aria-selected={active}
-      title={disabled ? "Not an SEC registrant" : company.name}
+      title={company.name}
     >
       <span className="picker-name">{company.short}</span>
       <span className="picker-meta">{company.subsector}</span>

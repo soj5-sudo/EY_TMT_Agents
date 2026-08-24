@@ -86,7 +86,6 @@ function nameKey(name: string): string {
   return name.toLowerCase().replace(LEGAL, "").replace(/[^a-z0-9]/g, "");
 }
 
-/** A workbook row and a filed row are the same company when one name contains the other. */
 function isHeld(held: Set<string>, key: string): boolean {
   if (key.length < 3) return false;
   if (held.has(key)) return true;

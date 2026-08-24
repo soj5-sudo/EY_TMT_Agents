@@ -107,7 +107,11 @@ function days(balance: number | null, flow: number | null): number | null {
 }
 
 function period(d: CompanyDossier): string {
-  return d.facts?.series.revenue?.annual.at(-1)?.label ?? "the latest reported year";
+  return (
+    d.derived.latestPeriod ??
+    d.facts?.series.revenue?.annual.at(-1)?.label ??
+    "the latest reported period"
+  );
 }
 
 function periodEnd(d: CompanyDossier): string | null {
@@ -2594,7 +2598,19 @@ const CANONICAL_METRICS = new Set([
   "Diluted EPS",
 ]);
 
-const consistency: SeatFn = (_d, e, prior) => {
+function published(d: CompanyDossier, label: string, value: string): boolean {
+  if (label !== "Revenue") return false;
+  const line = d.facts?.series.revenue;
+  if (!line) return false;
+  const stated = Number(value.replace(/[^0-9.]/g, ""));
+  if (!Number.isFinite(stated) || stated === 0) return false;
+  const tolerance = Math.max(0.05, stated * 0.02);
+  return [...line.annual, ...line.quarterly].some(
+    (p) => Math.abs(p.value / 1e9 - stated) < tolerance,
+  );
+}
+
+const consistency: SeatFn = (d, e, prior) => {
   const byLabel = new Map<string, Map<string, string[]>>();
   for (const x of prior) {
     if (!x.metric) continue;
@@ -2606,7 +2622,9 @@ const consistency: SeatFn = (_d, e, prior) => {
     byLabel.set(x.metric.label, held);
   }
 
-  const conflicts = [...byLabel.entries()].filter(([, v]) => v.size > 1);
+  const conflicts = [...byLabel.entries()].filter(
+    ([label, v]) => v.size > 1 && ![...v.keys()].every((value) => published(d, label, value)),
+  );
   const crossChecked = [...byLabel.entries()].filter(([, v]) => {
     const total = [...v.values()].reduce((s, a) => s + a.length, 0);
     return total > 1;

@@ -42,6 +42,22 @@ export const IR_INDEXES: IrIndex[] = [
     ],
   },
   {
+    symbol: "INFY",
+    name: "Infosys Limited",
+    urls: [
+      "https://www.infosys.com/investors/reports-filings/quarterly-results.html",
+      "https://www.infosys.com/investors/reports-filings/quarterly-results/2026-2027/q1.html",
+    ],
+  },
+  {
+    symbol: "WIT",
+    name: "Wipro Limited",
+    urls: [
+      "https://www.wipro.com/investors/quarterly-results/",
+      "https://www.wipro.com/investors/",
+    ],
+  },
+  {
     symbol: "MPHASIS.NS",
     name: "Mphasis Limited",
     urls: ["https://www.mphasis.com/home/corporate/investors.html"],
@@ -287,7 +303,6 @@ export interface IrMetric {
   unit: IrUnit | null;
   unitFromLabel: boolean;
   structured?: boolean;
-  /** Set when the figure was read from a sentence rather than a table. */
   derivedFrom?: string;
 }
 
@@ -386,11 +401,6 @@ function readSerialHeader(cells: string[]): string[] | null {
 const FISCAL_YEAR = /^FY\s?((?:19|20)\d{2})\s?[-/]\s?(\d{2})$/i;
 const QUARTER_CELL = /^(Q[1-4]|[1-4]Q|Total|Full[ _-]?Year|FY)$/i;
 
-/**
- * A data sheet often heads its columns twice: the fiscal year on one row, the
- * quarter on the next, with the year written once per group of columns. This
- * pairs the two rows back together so each column carries a whole period.
- */
 function readYearGroupHeader(previous: string[] | null, cells: string[]): string[] | null {
   if (!previous) return null;
 

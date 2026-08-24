@@ -99,8 +99,6 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
   if (ledger && revenueLine) {
     const annual = revenueLine.annual;
     const quarterly = revenueLine.quarterly;
-    // Whichever basis reaches furthest forward. A company that has reported a
-    // quarter since its last full year is shown on that quarter.
     const newestAnnual = annual.at(-1)?.end ?? "";
     const newestQuarter = quarterly.at(-1)?.end ?? "";
     const useAnnual = annual.length > 0 && newestAnnual >= newestQuarter;
@@ -125,8 +123,6 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
     if (basis.length >= 2) {
       const first = basis[0];
       const last = basis[basis.length - 1];
-      // Measured on the calendar rather than on the number of points, so a
-      // series that skips a quarter is not read as though it grew that fast.
       const years = (Date.parse(last.end) - Date.parse(first.end)) / (365.25 * 86_400_000);
       if (first.value > 0 && years >= 0.75) {
         growth = (Math.pow(last.value / first.value, 1 / years) - 1) * 100;
@@ -176,14 +172,6 @@ async function buildRow(c: (typeof UNIVERSE)[number]): Promise<SectorRow> {
   };
 }
 
-
-/**
- * The same rows, but only if they are already computed.
- *
- * Reading seventy companies takes minutes on a cold instance. A panel that
- * only needs the figures to enrich what it already has asks this way, gets
- * what is there, and starts the computation for the request after it.
- */
 export function sectorRowsIfWarm(): { rows: SectorRow[]; storedAt: number } | null {
   const hit = cacheGet<SectorRow[]>("sector:fundamentals");
   if (hit) return { rows: hit.value, storedAt: hit.storedAt };
@@ -191,10 +179,6 @@ export function sectorRowsIfWarm(): { rows: SectorRow[]; storedAt: number } | nu
   return null;
 }
 
-/**
- * Every company in the universe, on its own reported figures. One computation
- * shared by every panel that needs it, so two panels can never disagree.
- */
 export async function sectorRows(): Promise<{ rows: SectorRow[]; storedAt: number }> {
   const res = await cached("sector:fundamentals", TTL_MS, async () => {
     const rows: SectorRow[] = [];

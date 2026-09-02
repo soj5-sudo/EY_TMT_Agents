@@ -11,6 +11,11 @@ their numbers are published.
 
 Nothing is typed in by hand. There is no database, and no paid API.
 
+**Start here:** [ARCHITECTURE.md](ARCHITECTURE.md) is the system overview.
+It has the end-to-end data flow, how the scrapers work, how the model is
+trained, and a step-by-step server setup. Same document as a PDF:
+[TMT-Intelligence-Console-Architecture.pdf](TMT-Intelligence-Console-Architecture.pdf).
+
 ---
 
 ## 1. What you need before you start
@@ -170,7 +175,7 @@ function alongside `gemini()` and `huggingface()`.
 Three kinds of source, in the order the console tries them.
 
 **1. The SEC register.** For US registrants, `lib/research/facts.ts` pulls the
-company's XBRL `companyfacts` document in one request and lifts 43 diligence
+company's XBRL `companyfacts` document in one request and lifts 44 diligence
 concepts from it, under both the us-gaap and ifrs-full taxonomies. This is the
 whole reported history, not a summary of it.
 
@@ -312,18 +317,30 @@ estimating it.
 
 ## 8. The intent model
 
-`/api/chat` routes a typed question to the right computation. That routing is a
-multinomial logistic regression trained on labelled questions, not a set of
-keyword rules.
+`/api/chat` routes a typed question to the right computation. A set of keyword
+rules produces an intent, and a multinomial logistic regression trained on
+labelled questions overrides that intent when it is confident enough. The model
+sits in front of the rules; it does not replace them.
 
 - Training script: `scripts/train-intent.mts`
 - Weights, checked in: `lib/brain/intent-model.ts`
 - Classifier: `lib/brain/classifier.ts`
+- The rules, and the floor that decides which answer stands: `lib/brain/intent.ts`
 
-Accuracy on held-out questions is 81.2 percent, against 39.0 percent for the
-keyword rules it replaced. Below a confidence of 0.8 it declines to guess and
-asks the reader to rephrase, which is why the shipped policy measures 83.7
-percent: refusing is better than answering the wrong question.
+Measured on 34 held-out pattern families, 1,794 questions the model has never
+seen phrased that way:
+
+| | Held out |
+|---|---|
+| Model alone | 81.2% |
+| Keyword rules alone | 82.1% |
+| Model in front of the rules, 0.80 confidence floor | 82.7% |
+
+The rules beat the model overall, which is why both are kept. The model exists
+for comparison questions, where it scores 100 percent against the rules' 74.5
+percent on phrasings like "how does X stack up against Y". The confidence floor
+keeps it out of the way on the classes the rules already handle well. The
+training script sweeps that floor from 0 to 0.95 and prints the best.
 
 Retrain after adding training examples:
 

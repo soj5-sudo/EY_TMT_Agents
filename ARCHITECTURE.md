@@ -766,6 +766,27 @@ The push is the deploy. Nothing else is needed.
 
 ---
 
+### It may already be running without you
+
+There is a GitHub Action at `.github/workflows/deploy.yml` that typechecks and
+builds on every push, and on a schedule (`0 6 * * 1`, Monday mornings) re-runs
+the harvest and commits any change to the stored readings. Its commits are
+authored by `github-actions[bot]` and read "Refresh the harvested results
+files".
+
+So the quarterly refresh in part B is a manual override, not a chore you have
+to remember. Run it yourself when you want a specific quarter in immediately,
+or when the scheduled run could not reach a site from GitHub's network.
+
+**If a push is rejected as non-fast-forward**, the bot has committed since you
+last pulled. Rebase onto it rather than forcing:
+
+```bash
+git fetch origin && git rebase origin/main && git push
+```
+
+---
+
 ### The whole of part B, if you already have Python set up
 
 ```bash
